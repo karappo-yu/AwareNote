@@ -347,6 +347,7 @@ async def trigger_scan():
                 traverse(category)
                 return all_categories, all_books
             
+            # scanned_categories 已经是所有的分类（包括子分类）的扁平化列表
             scanned_categories, scanned_books = extract_categories_and_books(root_category)
             
             # 获取数据库中现有的书籍和分类
@@ -356,18 +357,11 @@ async def trigger_scan():
             # 构建 ID 集合用于快速查找
             scanned_book_ids = {book.id for book in scanned_books}
             
-            # 递归获取所有分类（包括子分类）
-            def get_all_categories_recursive(categories):
-                all_categories = []
-                for category in categories:
-                    all_categories.append(category)
-                    if category.sub_categories:
-                        all_categories.extend(get_all_categories_recursive(category.sub_categories))
-                return all_categories
+            # 这里的 scanned_categories 已经包含了所有分类，不需要再递归获取
+            # 如果再递归获取，会导致子分类在列表中出现多次（父分类带子分类，子分类自己又出现一次）
+            # 这就是导致第一次成功，第二次报 IntegrityError 的原因
             
-            # 获取所有分类（包括子分类）
-            all_scanned_categories = get_all_categories_recursive(scanned_categories)
-            scanned_category_ids = {category.id for category in all_scanned_categories}
+            scanned_category_ids = {category.id for category in scanned_categories}
             
             # 构建数据库书籍和分类的ID集合
             db_book_ids = {book.id for book in db_books}
@@ -435,7 +429,8 @@ async def trigger_scan():
                         yield f"data: {{\"type\": \"WARN\", \"message\": \"Failed to delete book {book.title}: {str(e)}\"}}\n\n"
             
             # 添加新分类或更新现有分类
-            for category in all_scanned_categories:
+            # 修正：直接使用 scanned_categories 迭代，而不是 all_scanned_categories
+            for category in scanned_categories:
                 if category.id not in db_category_ids:
                     try:
                         db.add_category(category)
@@ -494,7 +489,7 @@ async def trigger_scan():
             # 构建结果
             result = {
                 "scanned": {
-                    "categories": len(all_scanned_categories),
+                    "categories": len(scanned_categories),
                     "books": len(scanned_books)
                 },
                 "synced": {
@@ -546,5 +541,3 @@ async def trigger_scan():
         event_generator(),
         media_type="text/event-stream"
     )
-
-
