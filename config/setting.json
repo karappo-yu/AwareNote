@@ -7,7 +7,9 @@
         ".ds_store",
         ".html",
         ".db",
-        ".avif"
+        ".avif",
+        ".zip",
+        ".rar"
     ],
     "cover_width": 1000,
     "scan_strategy_max_width": 2500,
@@ -20,8 +22,8 @@
         ".png",
         ".gif",
         ".webp",
-        ".zip",
-        ".rar"
+        ".avif"
+        
     ],
     "auto_scan_on_startup": false,
     "use_thread_pool": true,

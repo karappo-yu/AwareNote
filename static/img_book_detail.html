@@ -587,6 +587,46 @@
                 grid.appendChild(li);
             }
 
+            // 预加载下一页的缩略图，减少翻页时的加载闪动
+            // 等待当前页所有图片加载完成后再预加载下一页
+            if (end < total) {
+                const nextStart = end;
+                const nextEnd = Math.min(nextStart + pageSize, total);
+                
+                // 等待当前页所有图片加载完成
+                const currentPageImages = grid.querySelectorAll('img');
+                let loadedCount = 0;
+                
+                const checkAllLoaded = () => {
+                    loadedCount++;
+                    if (loadedCount >= currentPageImages.length) {
+                        // 当前页所有图片加载完成，开始预加载下一页
+                        for (let i = nextStart; i < nextEnd; i++) {
+                            const thumbnailUrl = `${API_BASE}/books/${encodeURIComponent(currentBook.id)}/${i+1}`;
+                            preloadImage(thumbnailUrl);
+                        }
+                    }
+                };
+                
+                if (currentPageImages.length === 0) {
+                    // 没有图片，直接预加载下一页
+                    for (let i = nextStart; i < nextEnd; i++) {
+                        const thumbnailUrl = `${API_BASE}/books/${encodeURIComponent(currentBook.id)}/${i+1}`;
+                        preloadImage(thumbnailUrl);
+                    }
+                } else {
+                    // 监听当前页图片加载完成
+                    currentPageImages.forEach(img => {
+                        if (img.complete) {
+                            checkAllLoaded();
+                        } else {
+                            img.onload = checkAllLoaded;
+                            img.onerror = checkAllLoaded;
+                        }
+                    });
+                }
+            }
+
             if (viewer) viewer.destroy();
             viewer = new Viewer(grid, {
                 url: 'data-original',
