@@ -428,8 +428,9 @@ async def trigger_scan():
                     except Exception as e:
                         yield f"data: {{\"type\": \"WARN\", \"message\": \"Failed to delete book {book.title}: {str(e)}\"}}\n\n"
             
-            # 添加新分类或更新现有分类
+            # 添加新分类
             # 修正：直接使用 scanned_categories 迭代，而不是 all_scanned_categories
+            # 注意：如果文件夹路径变了，就不是原来的文件夹了，不应该更新，而应该删除旧的，添加新的
             for category in scanned_categories:
                 if category.id not in db_category_ids:
                     try:
@@ -438,26 +439,22 @@ async def trigger_scan():
                         yield f"data: {{\"type\": \"SUCCESS\", \"message\": \"Added category: {category.name}\"}}\n\n"
                     except Exception as e:
                         yield f"data: {{\"type\": \"WARN\", \"message\": \"Failed to add category {category.name}: {str(e)}\"}}\n\n"
-                else:
-                    try:
-                        # 检查分类内容是否真的有变化
-                        existing_category = db.get_category_by_id(category.id)
-                        if existing_category:
-                            # 比较关键属性是否有变化
-                            if (existing_category.name != category.name or 
-                                existing_category.path != category.path):
-                                db.update_category(category)
-                                yield f"data: {{\"type\": \"INFO\", \"message\": \"Updated category: {category.name}\"}}\n\n"
-                        else:
-                            # 如果分类不存在（可能是缓存问题），则添加
-                            db.add_category(category)
-                            added_categories += 1
-                            yield f"data: {{\"type\": \"SUCCESS\", \"message\": \"Added category: {category.name}\"}}\n\n"
-                    except Exception as e:
-                        yield f"data: {{\"type\": \"WARN\", \"message\": \"Failed to update category {category.name}: {str(e)}\"}}\n\n"
             
             # 删除不存在的分类
-            for category in db_categories:
+            # 递归获取所有数据库分类（包括子分类）
+            def get_all_categories_recursive(categories):
+                all_categories = []
+                for category in categories:
+                    all_categories.append(category)
+                    if category.sub_categories:
+                        all_categories.extend(get_all_categories_recursive(category.sub_categories))
+                return all_categories
+            
+            # 获取所有数据库分类（包括子分类）
+            all_db_categories = get_all_categories_recursive(db_categories)
+            
+            # 遍历所有分类，检查是否需要删除
+            for category in all_db_categories:
                 if category.id not in scanned_category_ids:
                     try:
                         db.delete_category(category.id)

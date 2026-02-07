@@ -432,11 +432,11 @@
             const grid = document.getElementById('booksGrid');
             const countLabel = document.getElementById('bookCount');
             
-            countLabel.innerText = books.length > 0 ? `共查找到 ${books.length} 本书籍 (包含子目录)` : '该目录下暂无书籍';
-
             if (books.length === 0) {
-                grid.innerHTML = `<div class="col-span-full py-32 flex flex-col items-center justify-center text-zinc-700"><i data-lucide="ghost" class="w-12 h-12 mb-4 opacity-20"></i><p class="text-sm italic tracking-wide">未找到书籍</p></div>`;
+                countLabel.innerText = '请扫描目录';
+                grid.innerHTML = `<div class="col-span-full py-32 flex flex-col items-center justify-center text-zinc-700"><i data-lucide="folder-open" class="w-12 h-12 mb-4 opacity-20"></i><p class="text-sm italic tracking-wide">请扫描目录</p><button onclick="window.location.href = '/config'" class="mt-4 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded-lg text-xs transition-colors">前往设置</button></div>`;
             } else {
+                countLabel.innerText = `共查找到 ${books.length} 本书籍 (包含子目录)`;
                 grid.innerHTML = books.map(book => {
                     const coverUrl = `${API_BASE}/books/covers/${encodeURIComponent(book.id)}`;
                     const escapedId = book.id.replace(/'/g, "\\'");
