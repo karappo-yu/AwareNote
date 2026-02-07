@@ -23,9 +23,10 @@ def clear_cache():
     """
     清空缓存并返回释放的空间大小（MB）
     """
-    # 获取项目根目录
-    root_dir = os.path.dirname(os.path.dirname(__file__))
-    cache_dir = os.path.join(root_dir, "cache")
+    from utils.cache_utils import get_cache_directory
+    
+    # 获取缓存目录
+    cache_dir = get_cache_directory()
     
     # 检查cache目录是否存在
     if not os.path.exists(cache_dir):
@@ -116,6 +117,22 @@ async def get_system_config():
     }
     
     return response
+
+# 获取扫描路径信息
+@router.get("/root_path")
+async def get_root_path():
+    """
+    获取扫描路径信息
+    返回用户设置的扫描根路径
+    """
+    from config.config import get
+    
+    # 获取根路径配置
+    root_path = get("root_path")
+    
+    return {
+        "root_path": root_path
+    }
 
 # 更新系统配置
 @router.put("/config")

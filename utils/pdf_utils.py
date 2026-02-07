@@ -10,6 +10,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # 导入配置模块
 from config.config import get
 
+# 导入缓存工具
+from utils.cache_utils import get_cache_directory
+
 # 导入全局进程池管理模块
 from utils.pool_manager import get_thread_pool, get_processing_tasks, get_processing_lock
 
@@ -21,10 +24,10 @@ def get_pdf_cache_dir(book_id):
     """
     获取PDF缓存目录
     """
-    root_dir = os.path.dirname(os.path.dirname(__file__))
-    cache_dir = os.path.join(root_dir, "cache", "pdf", book_id)
-    os.makedirs(cache_dir, exist_ok=True)
-    return cache_dir
+    cache_dir = get_cache_directory()
+    pdf_cache_dir = cache_dir / "pdf" / book_id
+    pdf_cache_dir.mkdir(parents=True, exist_ok=True)
+    return str(pdf_cache_dir)
 
 # 解耦的处理函数 - 将PDF页面转换为SVG（纯同步函数）
 def process_pdf_page_to_svg(pdf_path, book_id, page_num):

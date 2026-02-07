@@ -102,6 +102,20 @@
                     <div class="space-y-3">
                         <h3 class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">资料详情</h3>
                         <p id="bookDescription" class="text-sm text-zinc-400 leading-relaxed">正在同步云端描述...</p>
+                        <div id="bookTechnicalInfo" class="text-xs text-zinc-500 space-y-2 pt-2 border-t border-zinc-800">
+                            <div class="flex justify-between">
+                                <span class="text-zinc-600">路径:</span>
+                                <span id="bookPath" class="text-zinc-400 truncate max-w-[200px]">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-zinc-600">优化策略:</span>
+                                <span id="bookOptimizationStrategy" class="text-zinc-400">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-zinc-600">平均尺寸:</span>
+                                <span id="bookPageDimension" class="text-zinc-400">--</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -167,6 +181,7 @@
         let currentPageIndex = 0;
         let pageSize = 20; // 默认每页20张，可从localStorage读取
         let viewer = null;
+        let systemConfig = null; // 存储系统配置信息
         
         // 从localStorage读取每页数量设置
         function loadPageSize() {
@@ -314,6 +329,22 @@
         });
 
             if (!bookId) return;
+            
+            // 获取扫描路径信息
+            try {
+                const rootPathResponse = await fetch(`${API_BASE}/root_path`);
+                if (rootPathResponse.ok) {
+                    const rootPathData = await rootPathResponse.json();
+                    systemConfig = {
+                        settings: {
+                            root_path: rootPathData.root_path
+                        }
+                    };
+                }
+            } catch (e) {
+                console.error('Failed to fetch root path:', e);
+            }
+            
             await fetchBookDetail();
         }
 
@@ -379,7 +410,44 @@
             document.getElementById('bookTitle').innerText = currentBook.title;
             document.getElementById('pageCountLabel').innerText = `${currentBook.page_count} PAGES`;
             document.getElementById('formatLabel').innerText = currentBook.type === 'pdf_book' ? 'PDF' : 'JPG';
-            document.getElementById('bookDescription').innerText = currentBook.description || "点击“开始沉浸阅读”进入无缝滚动模式，或点击右侧缩略图进入大图翻页模式。";
+            document.getElementById('bookDescription').innerText = currentBook.description || "pdf会有svg缓存";
+            
+            // 渲染技术信息
+            // 路径信息不需要书本本身的名字，也不需要显示扫描路径前缀
+            if (currentBook.path) {
+                let displayPath = currentBook.path;
+                
+                // 移除扫描路径前缀
+                if (systemConfig && systemConfig.settings && systemConfig.settings.root_path) {
+                    const rootPath = systemConfig.settings.root_path;
+                    if (displayPath.startsWith(rootPath)) {
+                        // 移除根路径前缀，保留相对路径
+                        displayPath = displayPath.substring(rootPath.length);
+                        // 移除开头的斜杠
+                        if (displayPath.startsWith('/')) {
+                            displayPath = displayPath.substring(1);
+                        }
+                    }
+                }
+                
+                // 移除最后一个部分（文件名）
+                const pathParts = displayPath.split('/');
+                if (pathParts.length > 1) {
+                    pathParts.pop();
+                    document.getElementById('bookPath').innerText = pathParts.join('/') || "--";
+                } else {
+                    document.getElementById('bookPath').innerText = displayPath || "--";
+                }
+            } else {
+                document.getElementById('bookPath').innerText = "--";
+            }
+            
+            // 优化策略显示文本 - PDF固定显示有svg缓存
+            document.getElementById('bookOptimizationStrategy').innerText = "有svg缓存";
+            
+            // 平均尺寸
+            document.getElementById('bookPageDimension').innerText = currentBook.page_dimension_type || "--";
+            
             lucide.createIcons();
         }
 

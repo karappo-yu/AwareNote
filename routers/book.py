@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 import os
 from models.book import Book, BookCreate, BookUpdate, BookResponse
 from database.db import get_db, Database
+from utils.cache_utils import get_cache_directory
 
 # 检查缩略图是否存在
 def check_thumbnail_exists(book_id: str, page: int, width: int) -> str:
@@ -18,12 +19,13 @@ def check_thumbnail_exists(book_id: str, page: int, width: int) -> str:
         缩略图路径（如果存在），否则返回空字符串
     """
     # 确保cache/thumbnails目录存在
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "thumbnails", book_id)
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = get_cache_directory()
+    thumbnails_dir = cache_dir / "thumbnails" / book_id
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
     
     # 缩略图路径
     thumbnail_filename = f"{page}_{width}.jpg"
-    thumbnail_path = os.path.join(cache_dir, thumbnail_filename)
+    thumbnail_path = str(thumbnails_dir / thumbnail_filename)
     
     # 检查缩略图是否存在
     if os.path.exists(thumbnail_path):

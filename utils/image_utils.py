@@ -16,6 +16,9 @@ from database.db import get_db
 # 获取配置信息
 from config.config import cover_width, get
 
+# 导入缓存工具
+from utils.cache_utils import get_cache_directory
+
 # 导入全局进程池管理模块
 from utils.pool_manager import get_thread_pool, shutdown_thread_pool, get_processing_tasks, get_processing_lock
 
@@ -222,12 +225,13 @@ async def generate_cover_async(book) -> str:
         raise ValueError("Book object is required")
     
     # 确保cache/covers目录存在
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "covers")
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = get_cache_directory()
+    cover_dir = cache_dir / "covers"
+    cover_dir.mkdir(parents=True, exist_ok=True)
     
     # 封面图片路径
     cover_filename = f"{book.id}.jpg"
-    cover_path = os.path.join(cache_dir, cover_filename)
+    cover_path = str(cover_dir / cover_filename)
     
     # 如果封面已存在，直接返回
     if os.path.exists(cover_path):
@@ -308,12 +312,13 @@ def generate_cover_sync(book) -> str:
         raise ValueError("Book object is required")
     
     # 确保cache/covers目录存在
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "covers")
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = get_cache_directory()
+    cover_dir = cache_dir / "covers"
+    cover_dir.mkdir(exist_ok=True)
     
     # 封面图片路径
     cover_filename = f"{book.id}.jpg"
-    cover_path = os.path.join(cache_dir, cover_filename)
+    cover_path = str(cover_dir / cover_filename)
     
     # 如果封面已存在，直接返回
     if os.path.exists(cover_path):
@@ -372,12 +377,13 @@ async def generate_thumbnail_async(book, page_number: int, thumbnail_width: int)
         thumbnail_path: 缩略图路径
     """
     # 确保cache/thumbnails目录存在
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "thumbnails", book.id)
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = get_cache_directory()
+    thumbnails_dir = cache_dir / "thumbnails" / book.id
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
     
     # 缩略图路径
     thumbnail_filename = f"{page_number}_{thumbnail_width}.jpg"
-    thumbnail_path = os.path.join(cache_dir, thumbnail_filename)
+    thumbnail_path = str(thumbnails_dir / thumbnail_filename)
     
     # 如果缩略图已存在，直接返回
     if os.path.exists(thumbnail_path):
@@ -466,12 +472,13 @@ def generate_thumbnail_sync(book, page_number: int, thumbnail_width: int) -> str
         thumbnail_path: 缩略图路径
     """
     # 确保cache/thumbnails目录存在
-    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache", "thumbnails", book.id)
-    os.makedirs(cache_dir, exist_ok=True)
+    cache_dir = get_cache_directory()
+    thumbnails_dir = cache_dir / "thumbnails" / book.id
+    thumbnails_dir.mkdir(parents=True, exist_ok=True)
     
     # 缩略图路径
     thumbnail_filename = f"{page_number}_{thumbnail_width}.jpg"
-    thumbnail_path = os.path.join(cache_dir, thumbnail_filename)
+    thumbnail_path = str(thumbnails_dir / thumbnail_filename)
     
     # 如果缩略图已存在，直接返回
     if os.path.exists(thumbnail_path):
