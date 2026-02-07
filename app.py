@@ -394,7 +394,7 @@ async def trigger_scan():
                         
                         # 生成书籍封面
                         try:
-                            from utils.image_utils import generate_cover
+                            from utils.image_utils import generate_cover, generate_cover_sync
                             generate_cover_sync(book)
                             yield f"data: {{\"type\": \"INFO\", \"message\": \"Generated cover for: {book.title}\"}}\n\n"
                         except Exception as e:
