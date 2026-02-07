@@ -1,0 +1,27 @@
+{
+    "version": "v1.2.0",
+    "root_path": "/Users/mac/Pictures",
+    "ignored_file_types": [
+        ".txt",
+        ".nfo",
+        ".ds_store",
+        ".html",
+        ".db"
+    ],
+    "cover_width": 1000,
+    "scan_strategy_max_width": 2500,
+    "scan_strategy_max_length": 2500,
+    "scan_strategy_max_pixel_area": 5000000,
+    "compressedWidth": 1920,
+    "image_exts": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".webp"
+    ],
+    "auto_scan_on_startup": false,
+    "use_thread_pool": true,
+    "thread_pool_max_workers": 9,
+    "thread_pool_idle_timeout": 30
+}

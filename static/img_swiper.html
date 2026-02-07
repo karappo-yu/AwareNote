@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>阅读器</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Swiper CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'PingFang SC', sans-serif; }
+        
+        html, body, #swiperContainer {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        .swiper {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .swiper-slide {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        
+        .swiper-slide img {
+            max-width: 100vw;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+        
+        /* 进度条 - 右上角，半透明 */
+        #progress {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-family: monospace;
+            color: rgba(255, 255, 255, 0.8);
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        #progress.visible {
+            opacity: 1;
+        }
+        
+        /* 简单工具栏 - 右侧，鼠标靠近或触摸时显示 */
+        #toolbar {
+            position: fixed;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 20, 23, 0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 9999px;
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            z-index: 50;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #toolbar.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-50%) translateX(-6px);  /* 左移一点，更明显 */
+        }
+        .tool-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a1a1aa;
+            transition: all 0.2s;
+        }
+        .tool-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        .tool-btn.active {
+            color: #818cf8;
+        }
+        
+        /* 滚动条样式 - 右侧，半透明 */
+        .swiper-scrollbar {
+            position: fixed;
+            right: 0;
+            top: 20px;
+            bottom: 20px;
+            width: 20px;
+            background: transparent;
+            border-radius: 3px;
+            opacity: 0;
+            transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 49;
+            pointer-events: none;
+        }
+        
+        .swiper-scrollbar.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .swiper-scrollbar:hover {
+            opacity: 1;
+        }
+        
+        /* 滚动条轨道 */
+        .swiper-scrollbar::before {
+            content: '';
+            position: absolute;
+            right: 8px;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        
+        .swiper-scrollbar-drag {
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 3px;
+            cursor: pointer;
+            min-height: 40px;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 6px;
+            position: absolute;
+            right: 8px;
+            left: auto;
+        }
+        
+        .swiper-scrollbar:hover .swiper-scrollbar-drag,
+        .swiper-scrollbar-drag:hover,
+        .swiper-scrollbar-drag:active {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 4px;
+            width: 12px;
+            right: 4px;
+            min-height: 44px;
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    </style>
+</head>
+<body class="bg-black text-white">
+    <!-- Swiper 容器 -->
+    <div id="swiperContainer" class="swiper">
+        <div class="swiper-wrapper">
+            <!-- 动态注入 slides -->
+        </div>
+        <div class="swiper-scrollbar"></div>
+    </div>
+    
+    <!-- 进度显示 -->
+    <div id="progress">P 1 / --</div>
+    
+    <!-- 简洁工具栏 -->
+    <div id="toolbar">
+        <button id="btnBack" class="tool-btn" title="返回">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <button id="btnFitWidth" class="tool-btn active" title="适应宽度">
+            <i data-lucide="align-justify" class="w-5 h-5"></i>
+        </button>
+        <button id="btnFitScreen" class="tool-btn" title="适应屏幕">
+            <i data-lucide="maximize" class="w-5 h-5"></i>
+        </button>
+  
+    </div>
+
+    <!-- Swiper JS -->
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    
+    <script>
+    const API_BASE = '/api';  // 如果这里不对，请改成你实际能直接访问的基路径
+    let bookId = null;
+    
+    // 从URL路径中获取book_id（RESTful风格）
+    const pathParts = window.location.pathname.split('/');
+    if (pathParts.length >= 3 && pathParts[1] === 'img_swiper' && pathParts[2]) {
+        bookId = pathParts[2];
+    } else {
+        // 保持向后兼容，从查询参数中获取
+        const params = new URLSearchParams(window.location.search);
+        bookId = params.get('id');
+    }
+    
+    let swiper = null;
+    let currentBook = null;
+    
+function initToolbarReveal() {
+    const toolbar = document.getElementById('toolbar');
+    const scrollbar = document.querySelector('.swiper-scrollbar');
+    const container = document.getElementById('swiperContainer');
+    
+    if (!toolbar || !container) return;
+    
+    const IDLE_HIDE_DELAY = 3000;    // 鼠标静止3秒后隐藏（ms）
+    let hideTimer = null;
+    let isDragging = false;
+    
+    const show = () => {
+        clearTimeout(hideTimer);
+        toolbar.classList.add('visible');
+        if (scrollbar) {
+            scrollbar.classList.add('visible');
+        }
+    };
+    
+    const hide = () => {
+        if (isDragging) return; // 拖动中不隐藏
+        
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+            toolbar.classList.remove('visible');
+            if (scrollbar) {
+                scrollbar.classList.remove('visible');
+            }
+        }, IDLE_HIDE_DELAY);
+    };
+    
+    // 鼠标移动时立即显示，并开始计时隐藏
+    container.addEventListener('mousemove', () => {
+        show();
+        hide();
+    });
+    
+    // 鼠标进入工具栏区域 → 强制保持显示（防止点按钮时隐藏）
+    toolbar.addEventListener('mouseenter', show);
+    
+    // 鼠标离开工具栏 → 开始计时隐藏
+    toolbar.addEventListener('mouseleave', hide);
+    
+    // 滚动条事件处理
+    if (scrollbar) {
+        scrollbar.addEventListener('mouseenter', show);
+        scrollbar.addEventListener('mouseleave', hide);
+        
+        // 拖动条事件处理
+        const dragBar = scrollbar.querySelector('.swiper-scrollbar-drag');
+        if (dragBar) {
+            // 鼠标按下开始拖动
+            dragBar.addEventListener('mousedown', () => {
+                isDragging = true;
+                show();
+            });
+            
+            // 鼠标离开拖动条但未释放
+            dragBar.addEventListener('mouseleave', (e) => {
+                if (e.buttons === 1) { // 鼠标左键仍按下
+                    isDragging = true;
+                    show();
+                }
+            });
+        }
+    }
+    
+    // 全局鼠标释放事件
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        // 释放后开始计时隐藏
+        hide();
+    });
+    
+    // 鼠标离开整个容器 → 隐藏
+    container.addEventListener('mouseleave', () => {
+        clearTimeout(hideTimer);
+        toolbar.classList.remove('visible');
+        if (scrollbar) {
+            scrollbar.classList.remove('visible');
+        }
+    });
+    
+    // 触摸设备：触摸任意位置显示，3秒后如果没再触摸就隐藏
+    container.addEventListener('touchstart', () => {
+        show();
+        clearTimeout(toolbar._touchHide);
+        toolbar._touchHide = setTimeout(hide, 3000);
+    });
+    
+    // 初始隐藏
+    toolbar.classList.remove('visible');
+    if (scrollbar) {
+        scrollbar.classList.remove('visible');
+    }
+}
+    
+    async function init() {
+        lucide.createIcons();
+        
+        if (!bookId) {
+            document.body.innerHTML = '<div class="text-center p-10 text-red-400">缺少 ?id= 参数</div>';
+            return;
+        }
+        
+        try {
+            const detailUrl = `${API_BASE}/books/${encodeURIComponent(bookId)}`;
+            
+            const resp = await fetch(detailUrl);
+            if (!resp.ok) throw new Error(`详情 ${resp.status}`);
+            
+            currentBook = await resp.json();
+            
+            const total = currentBook.page_count || 0;
+            if (total === 0) throw new Error('页数为 0');
+            
+            document.getElementById('progress').textContent = `P 1 / ${total}`;
+            
+            const wrapper = document.querySelector('.swiper-wrapper');
+            wrapper.innerHTML = ''; // 清空防止重复
+            
+            for (let i = 0; i < total; i++) {
+                const pageUrl = `${API_BASE}/books/${encodeURIComponent(bookId)}/${i+1}?realsize=true`;
+                
+                const slide = document.createElement('div');
+                slide.className = 'swiper-slide';
+                slide.dataset.pageIndex = i;
+                
+                const img = document.createElement('img');
+                img.alt = `页 ${i+1}`;
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '100vh';
+                img.style.objectFit = 'contain';
+                
+                // 先用低质量占位（可选），这里直接用真实图但延迟加载
+                img.loading = 'lazy';               // 原生 lazy
+                img.dataset.swiperSrc = pageUrl;    // 自定义属性
+                
+                slide.appendChild(img);
+                wrapper.appendChild(slide);
+                
+
+            }
+            
+            let progressTimer = null;
+            const progressElement = document.getElementById('progress');
+            
+            // 显示进度条并设置自动隐藏
+            function showProgress() {
+                clearTimeout(progressTimer);
+                progressElement.classList.add('visible');
+                progressTimer = setTimeout(() => {
+                    progressElement.classList.remove('visible');
+                }, 500);
+            }
+            
+            // 初始化 Swiper
+            swiper = new Swiper('#swiperContainer', {
+                direction: 'vertical',
+                slidesPerView: 'auto',
+                spaceBetween: 0,
+                freeMode: {
+                    enabled: true,
+                    momentum: true,
+                    momentumRatio: 1,
+                    momentumBounce: false,
+                    momentumBounceRatio: 1,
+                    momentumVelocityRatio: 1,
+                    sticky: false
+                },
+                keyboard: { enabled: true },
+                mousewheel: {
+                    enabled: true,
+                    sensitivity: 0.8,
+                    forceToAxis: true
+                },
+                scrollbar: {
+                    el: '.swiper-scrollbar',
+                    draggable: true,
+                    snapOnRelease: true,
+                    dragSize: 'auto'
+                },
+                lazy: false,  // 暂时关闭 swiper 自带 lazy，用手动 + 原生 lazy
+                speed: 400,
+                on: {
+                    init: function () {
+                        loadVisibleImages.call(this);  // 立即加载当前页
+                        showProgress(); // 初始显示一次
+                    },
+                    slideChange: function () {
+                        const idx = this.activeIndex + 1;
+                        progressElement.textContent = `P ${idx} / ${total}`;
+                        loadVisibleImages.call(this);  // 加载当前 + 上下各一张
+                        showProgress(); // 滑动时显示
+                    },
+                    touchStart: showProgress,
+                    mousewheel: showProgress,
+                    keyboard: showProgress,
+                    resize: function () {
+                        this.update();
+                    }
+                }
+            });
+            
+            // 手动加载图片函数（更可靠）
+            function loadVisibleImages() {
+                const activeIdx = this.activeIndex;
+                const range = 2; // 加载当前 + 前后各2张
+                
+                for (let offset = -range; offset <= range; offset++) {
+                    const idx = activeIdx + offset;
+                    if (idx < 0 || idx >= this.slides.length) continue;
+                    
+                    const slide = this.slides[idx];
+                    const img = slide.querySelector('img');
+                    if (!img) continue;
+                    
+                    if (!img.src || img.src === '') {
+                        const realSrc = img.dataset.swiperSrc;
+                        if (realSrc) {
+                            img.src = realSrc;
+                        }
+                    }
+                }
+            }
+            
+            // 初次强制 update
+            setTimeout(() => {
+                if (swiper) {
+                    swiper.update();
+                    swiper.emit('slideChange'); // 触发一次加载
+                }
+            }, 300);
+            
+            initToolbarReveal();
+            
+            // 按钮事件
+            document.getElementById('btnBack').onclick = () => history.back();
+            
+            document.getElementById('btnFitWidth').onclick = () => setMode('width');
+            document.getElementById('btnFitScreen').onclick = () => setMode('screen');
+            
+            setMode('width'); // 默认宽度优先
+            
+        } catch (err) {
+            document.body.innerHTML += `<div class="fixed inset-0 bg-black/80 flex items-center justify-center text-red-300 p-6">${err.message}</div>`;
+        }
+    }
+    
+    function setMode(mode) {
+        // 记录当前页面索引
+        const currentIndex = swiper ? swiper.activeIndex : 0;
+        
+        // 应用新的显示模式
+        document.querySelectorAll('.swiper-slide').forEach(slide => {
+            const img = slide.querySelector('img');
+            if (img) {
+                if (mode === 'width') {
+                    // 适应宽度模式：宽度100%，高度自适应，无限制
+                    img.style.width = '100%';
+                    img.style.height = 'auto';
+                    img.style.maxHeight = 'none';
+                    img.style.maxWidth = '100%';
+                    slide.style.height = 'auto';
+                } else {
+                    // 适应高度模式：高度100vh，宽度自适应，无限制
+                    img.style.height = '100vh';
+                    img.style.width = 'auto';
+                    img.style.maxHeight = '100vh';
+                    img.style.maxWidth = 'none';
+                    slide.style.height = '100vh';
+                }
+            }
+        });
+        
+        // 更新 Swiper 布局并重新定位到相同页面
+        if (swiper) {
+            swiper.update();
+            // 延迟一点确保布局更新完成
+            setTimeout(() => {
+                if (currentIndex < swiper.slides.length) {
+                    swiper.slideTo(currentIndex, 0);
+                    // 更新进度显示
+                    const idx = currentIndex + 1;
+                    const total = swiper.slides.length;
+                    document.getElementById('progress').textContent = `P ${idx} / ${total}`;
+                }
+            }, 100);
+        }
+        
+        // 更新按钮状态
+        document.getElementById('btnFitWidth').classList.toggle('active', mode === 'width');
+        document.getElementById('btnFitScreen').classList.toggle('active', mode === 'screen');
+    }
+    
+    window.addEventListener('load', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+# 虚拟环境
+venv/
+
+# 缓存目录
+cache/
+
+# 构建输出
+dist/
+build/
+
+# 打包生成的文件
+*.spec
+
+# 数据库文件
+*.db
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# IDE 配置
+.idea/
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Python 编译文件
+__pycache__/
+*.pyc
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 测试文件
+.pytest_cache/
+coverage/
+
+# 文档构建
+/docs/build/
+
+# 本地配置文件
+local_settings.py
+
+# 依赖文件（可选，如果你想让用户自己安装依赖）
+# requirements.txt

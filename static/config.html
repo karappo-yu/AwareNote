@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置 - Art Gallery</title>
+    <!-- 引入 Tailwind CSS (生产环境建议下载或使用构建工具) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Inter', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+        .glass-card {
+            background: rgba(24, 24, 27, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1.5rem;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+
+        .log-container::-webkit-scrollbar { width: 4px; }
+        .log-container::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 1000;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+
+        .log-line { border-left: 2px solid transparent; transition: all 0.2s; }
+        .log-line:hover { background: rgba(255,255,255,0.03); border-left-color: #6366f1; }
+
+        /* Custom Input Styles */
+        .input-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #71717a;
+            margin-bottom: 0.5rem;
+        }
+        .input-field {
+            width: 100%;
+            background: rgba(24, 24, 27, 0.5);
+            border: 1px solid #3f3f46;
+            color: #e4e4e7;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+            background: rgba(24, 24, 27, 0.8);
+        }
+
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #6366f1;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #6366f1;
+        }
+        .toggle-checkbox:checked + .toggle-label:before {
+            transform: translateX(100%);
+        }
+        
+        .toggle-label {
+            width: 3rem;
+            height: 1.5rem;
+            position: relative;
+            display: block;
+            background: #3f3f46;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .toggle-label:before {
+            content: '';
+            position: absolute;
+            top: 0.125rem;
+            left: 0.125rem;
+            width: 1.25rem;
+            height: 1.25rem;
+            background: #fff;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen overflow-x-hidden custom-scrollbar pb-20">
+
+    <!-- Navbar -->
+    <nav class="h-20 px-8 flex items-center justify-between border-b border-zinc-900 sticky top-0 bg-zinc-950/80 backdrop-blur-md z-50">
+        <div class="flex items-center gap-4">
+            <button onclick="window.location.href = '/'" class="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+            </button>
+            <h1 class="text-xl font-bold tracking-tight">系统设置</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="saveBtn" onclick="saveConfiguration()" class="hidden md:flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-full text-sm font-bold transition-all shadow-lg shadow-indigo-900/20 active:scale-95">
+                <i data-lucide="save" class="w-4 h-4"></i>
+                保存配置
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-4 md:p-8 space-y-10 fade-in">
+        
+        <!-- Setting Form Section -->
+        <form id="configForm" onsubmit="event.preventDefault();" class="space-y-8">
+            
+            <!-- Group 1: Core File System -->
+            <section class="space-y-4">
+                <div class="flex items-center gap-2 px-2 text-zinc-400">
+                    <i data-lucide="folder-cog" class="w-4 h-4"></i>
+                    <h2 class="text-xs font-bold uppercase tracking-widest">基础文件设置</h2>
+                </div>
+                <div class="glass-card p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div class="col-span-1 md:col-span-2 input-group">
+                        <label for="root_path">扫描根目录 (Root Path)</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="root_path" name="root_path" class="input-field font-mono" placeholder="/path/to/library">
+                        </div>
+                        <p class="mt-2 text-xs text-zinc-500">所有图片扫描将以此目录为起点。</p>
+                    </div>
+
+                    <div class="input-group">
+                        <label>扫描的图片格式</label>
+                        <input type="text" id="image_exts" name="image_exts" class="input-field font-mono text-xs" placeholder=".jpg, .png">
+                        <p class="mt-1 text-xs text-zinc-500">使用逗号分隔不同后缀名</p>
+                    </div>
+
+                    <div class="input-group">
+                        <label>扫描忽略的文件类型</label>
+                        <input type="text" id="ignored_file_types" name="ignored_file_types" class="input-field font-mono text-xs" placeholder=".txt, .nfo">
+                        <p class="mt-1 text-xs text-zinc-500">可以和图片包共存的文件类型</p>
+                    </div>
+
+                    <div class="col-span-1 md:col-span-2 flex items-center justify-between p-4 bg-zinc-900/40 rounded-xl border border-zinc-800">
+                        <div>
+                            <span class="block font-bold text-sm">启动时更新数据</span>
+                            <span class="text-xs text-zinc-500">程序启动时是否自动执行全量扫描</span>
+                        </div>
+                        <div class="relative inline-block w-12 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="auto_scan_on_startup" id="auto_scan_on_startup" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="auto_scan_on_startup" class="toggle-label overflow-hidden h-6 rounded-full bg-zinc-700 cursor-pointer"></label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Group 2: Image Processing -->
+            <section class="space-y-4">
+                <div class="flex items-center gap-2 px-2 text-zinc-400">
+                    <i data-lucide="image" class="w-4 h-4"></i>
+                    <h2 class="text-xs font-bold uppercase tracking-widest">图像处理策略</h2>
+                </div>
+                <div class="glass-card p-6 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    <div class="input-group">
+                        <label>封面生成宽度 (px)</label>
+                        <input type="number" name="cover_width" class="input-field">
+                    </div>
+                    <div class="input-group">
+                        <label>超大图片缩略图宽度 (px)</label>
+                        <input type="number" name="compressedWidth" class="input-field">
+                    </div>
+                    
+                    <!-- Scan Limits -->
+                    <div class="col-span-1 md:col-span-3 border-t border-zinc-800 pt-4 mt-2">
+                        <label class="mb-4 block text-zinc-500 text-xs font-bold uppercase">扫描策略（需要同时满足）</label>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="input-group">
+                                <label class="text-xs">视为超大图的大宽度</label>
+                                <input type="number" name="scan_strategy_max_width" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs">视为超大图的大宽度</label>
+                                <input type="number" name="scan_strategy_max_length" class="input-field">
+                            </div>
+                            <div class="input-group">
+                                <label class="text-xs">视为超大图的像素数</label>
+                                <input type="number" name="scan_strategy_max_pixel_area" class="input-field">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            
+            <!-- Mobile Save Button -->
+            <div class="md:hidden pb-8">
+                 <button onclick="saveConfiguration()" class="w-full flex items-center justify-center gap-2 px-5 py-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-lg font-bold transition-all shadow-lg shadow-indigo-900/20 active:scale-95">
+                    <i data-lucide="save" class="w-5 h-5"></i>
+                    保存配置
+                </button>
+            </div>
+        </form>
+
+        <!-- Existing Sections (Maintenance & Stats) -->
+        <section class="space-y-4 border-t border-zinc-800 pt-8">
+            <div class="flex items-center gap-2 px-2 text-zinc-400">
+                <i data-lucide="database" class="w-4 h-4"></i>
+                <h2 class="text-xs font-bold uppercase tracking-widest">数据库与维护</h2>
+            </div>
+            
+            <div class="glass-card p-6 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between group">
+                        <div class="space-y-1">
+                            <p class="font-bold">刷新数据库</p>
+                            <p class="text-xs text-zinc-500">触发后台文件系统扫描</p>
+                        </div>
+                        <button id="syncBtn" onclick="handleSync()" class="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white border border-indigo-500/30 rounded-xl text-sm font-bold transition-all active:scale-95">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            立即扫描
+                        </button>
+                    </div>
+
+                    <div class="p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between group">
+                        <div class="space-y-1">
+                            <p class="font-bold">清空系统缓存</p>
+                            <p class="text-xs text-zinc-500">删除缩略图和封面以及pdf的svg缓存</p>
+                        </div>
+                        <button id="clearCacheBtn" onclick="handleClearCache()" class="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-red-900/20 hover:text-red-400 hover:border-red-900/50 border border-transparent rounded-xl text-sm font-bold transition-all active:scale-95">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            清理缓存
+                        </button>
+                    </div>
+                </div>
+
+                <div id="logWrapper" class="hidden animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div class="bg-black/40 rounded-xl border border-zinc-800 overflow-hidden">
+                        <div class="px-4 py-2 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/30">
+                            <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-tight flex items-center gap-2">
+                                <span id="logStatusDot" class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                服务端扫描日志
+                            </span>
+                            <button onclick="clearLogs()" class="text-[10px] text-zinc-500 hover:text-zinc-300">清除日志</button>
+                        </div>
+                        <div id="logContent" class="log-container h-48 overflow-y-auto p-4 font-mono text-[12px] leading-relaxed text-zinc-400 space-y-1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-4">
+            <div class="flex items-center gap-2 px-2 text-zinc-400">
+                <i data-lucide="activity" class="w-4 h-4"></i>
+                <h2 class="text-xs font-bold uppercase tracking-widest">运行状态</h2>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="glass-card p-4 text-center space-y-1">
+                    <p class="text-[10px] text-zinc-500 uppercase font-bold">总计书籍</p>
+                    <p id="statBooks" class="text-xl font-bold font-mono">--</p>
+                </div>
+                <div class="glass-card p-4 text-center space-y-1">
+                    <p class="text-[10px] text-zinc-500 uppercase font-bold">缓存占用</p>
+                    <p id="statCache" class="text-xl font-bold font-mono">--</p>
+                </div>
+                <div class="glass-card p-4 text-center space-y-1">
+                    <p class="text-[10px] text-zinc-500 uppercase font-bold">后端负载</p>
+                    <p id="statStatus" class="text-xl font-bold font-mono text-zinc-500">Checking...</p>
+                </div>
+                <div class="glass-card p-4 text-center space-y-1">
+                    <p class="text-[10px] text-zinc-500 uppercase font-bold">API 版本</p>
+                    <p id="statVersion" class="text-xl font-bold font-mono text-indigo-400">--</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="flex items-center gap-3 px-6 py-3 bg-white text-zinc-950 rounded-full font-bold shadow-2xl border border-zinc-200">
+        <i id="toastIcon" data-lucide="check-circle-2" class="w-5 h-5"></i>
+        <span id="toastText">操作已成功完成</span>
+    </div>
+
+    <script>
+        // --- Configuration & Constants ---
+        const API_BASE = '/api'; // Adjust if your backend is on a different port/path
+        
+        // --- DOM Elements ---
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        const logWrapper = document.getElementById('logWrapper');
+        const logContent = document.getElementById('logContent');
+        const configForm = document.getElementById('configForm');
+
+        // --- Initialization ---
+        window.onload = function() {
+            lucide.createIcons();
+            fetchSystemConfig();
+        };
+
+        // --- 1. Fetch & Populate Data ---
+        async function fetchSystemConfig() {
+            try {
+                const res = await fetch(`${API_BASE}/config`);
+                if (!res.ok) throw new Error('Config load failed');
+                
+                // Expecting response format: { stats: {...}, settings: {...} }
+                const data = await res.json();
+
+                // Update Stats
+                if (data.stats) updateStats(data.stats);
+
+                // Populate Form
+                if (data.settings) populateForm(data.settings);
+
+            } catch (err) {
+                console.warn('API Offline:', err);
+                document.getElementById('statStatus').innerText = 'OFFLINE';
+                document.getElementById('statStatus').className = 'text-xl font-bold font-mono text-red-500';
+                showToast("无法连接到服务器", "wifi-off");
+            }
+        }
+
+        function updateStats(stats) {
+            document.getElementById('statBooks').innerText = (stats.total_books || 0).toLocaleString();
+            document.getElementById('statCache').innerText = ((stats.cache_size_mb || 0) / 1024).toFixed(1) + ' GB';
+            document.getElementById('statVersion').innerText = stats.version || 'v1.0';
+
+            const statusEl = document.getElementById('statStatus');
+            statusEl.innerText = (stats.server_status || 'Unknown').toUpperCase();
+            statusEl.className = stats.server_status === 'healthy'
+                ? 'text-xl font-bold font-mono text-emerald-500'
+                : 'text-xl font-bold font-mono text-amber-500';
+        }
+
+        function populateForm(settings) {
+            // Helper to set values based on type
+            const setVal = (name, value) => {
+                const el = configForm.elements[name];
+                if (!el) return;
+
+                if (el.type === 'checkbox') {
+                    el.checked = !!value;
+                } else if (Array.isArray(value)) {
+                    // Convert array to comma-separated string
+                    el.value = value.join(', ');
+                } else {
+                    el.value = value;
+                }
+            };
+
+            // Map JSON keys to form names
+            Object.keys(settings).forEach(key => {
+                setVal(key, settings[key]);
+            });
+
+
+        }
+
+        // --- 2. Save Configuration ---
+        window.saveConfiguration = async function() {
+            const btn = document.getElementById('saveBtn');
+            const originalContent = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 保存中...`;
+            lucide.createIcons();
+
+            try {
+                // Gather form data
+                const formData = new FormData(configForm);
+                const payload = {};
+                
+                // Helper to parse types correctly
+                const numFields = ['cover_width', 'scan_strategy_max_width', 'scan_strategy_max_length', 'scan_strategy_max_pixel_area', 'compressedWidth'];
+                const arrayFields = ['ignored_file_types', 'image_exts'];
+                const boolFields = ['auto_scan_on_startup'];
+
+                // Explicitly iterate expected fields from the JSON spec to build payload
+                // (Using configForm.elements to iterate all inputs)
+                Array.from(configForm.elements).forEach(el => {
+                    if(!el.name) return;
+                    
+                    let val = el.value;
+
+                    if (el.type === 'checkbox') {
+                        payload[el.name] = el.checked;
+                    } else if (numFields.includes(el.name)) {
+                        payload[el.name] = Number(val);
+                    } else if (arrayFields.includes(el.name)) {
+                        // Split string by comma, trim spaces, remove empty
+                        payload[el.name] = val.split(',').map(s => s.trim()).filter(s => s);
+                    } else {
+                        payload[el.name] = val;
+                    }
+                });
+
+                // Send PUT request
+                const res = await fetch(`${API_BASE}/config`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    showToast('设置已保存并生效', 'check-circle-2');
+                    fetchSystemConfig(); // Reload to confirm
+                } else {
+                    throw new Error('Save failed');
+                }
+
+            } catch (err) {
+                console.error(err);
+                showToast('保存设置失败，请检查控制台', 'alert-circle');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+                lucide.createIcons();
+            }
+        }
+
+        // --- 3. Interaction Handlers ---
+
+
+        // --- 4. Existing Sync & Maintenance Logic ---
+        window.handleSync = function() {
+            const btn = document.getElementById('syncBtn');
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 连接中...`;
+            lucide.createIcons();
+
+            logWrapper.classList.remove('hidden');
+            clearLogs();
+            addLogLine('INFO', 'Initiating server-side directory scan...');
+
+            // Assuming Server-Sent Events for log streaming
+            const eventSource = new EventSource(`${API_BASE}/scan`);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addLogLine(data.type || 'INFO', data.message);
+                    
+                    if (data.type === 'COMPLETE') {
+                        eventSource.close();
+                        const isError = data.status === 'error';
+                        syncFinished(btn, data.message, isError);
+                    }
+                } catch (error) {
+                    console.error('Error parsing SSE message:', error);
+                }
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                addLogLine('WARN', 'Stream connection ended. Check logs for details.');
+                syncFinished(btn, "扫描结束", false); // Assume success if stream ends cleanly mostly
+            };
+        }
+
+        function syncFinished(btn, msg, isError = false) {
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="refresh-cw" class="w-4 h-4"></i> 立即扫描`;
+            lucide.createIcons();
+            showToast(msg, isError ? 'alert-circle' : 'check-circle-2');
+            fetchSystemConfig();
+        }
+
+        function addLogLine(type, message) {
+            const colors = { 'INFO': 'text-zinc-500', 'DEBUG': 'text-indigo-400', 'WARN': 'text-amber-500', 'SUCCESS': 'text-emerald-500', 'ERROR': 'text-red-500' };
+            const line = document.createElement('div');
+            line.className = 'log-line pl-2';
+            line.innerHTML = `<span class="${colors[type] || 'text-zinc-400'} font-bold">[${type}]</span> ${message}`;
+            logContent.appendChild(line);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        function clearLogs() { logContent.innerHTML = ''; }
+
+        window.handleClearCache = async function() {
+            clearCacheBtn.disabled = true;
+            clearCacheBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 正在清理...`;
+            lucide.createIcons();
+
+            try {
+                const res = await fetch(`${API_BASE}/cache/clear`, { method: 'DELETE' });
+                
+                if (res.ok) {
+                    const result = await res.json();
+                    showToast(`清理成功：释放了 ${result.space_freed_mb || 0} MB 空间`, 'trash-2');
+                    fetchSystemConfig();
+                } else {
+                    showToast('服务器清理失败', 'alert-circle');
+                }
+            } catch (err) {
+                showToast('无法连接服务器', 'alert-circle');
+            } finally {
+                clearCacheBtn.disabled = false;
+                clearCacheBtn.innerHTML = `<i data-lucide="trash-2" class="w-4 h-4"></i> 清理缓存`;
+                lucide.createIcons();
+            }
+        }
+
+        function showToast(text, icon = 'check-circle-2') {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toastText');
+            const toastIcon = document.getElementById('toastIcon');
+            toastText.innerText = text;
+            toastIcon.setAttribute('data-lucide', icon);
+            lucide.createIcons();
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+## 修复滚动处理和收藏状态管理
+
+### 1. 移除所有滚动相关代码
+- **文件: static/index.html**
+  - 移除 `saveScrollPosition()` 函数
+  - 移除 `applySavedScrollPosition()` 函数
+  - 移除 `forceApplyScrollPosition()` 函数
+  - 移除 `setupScrollObserver()` 函数
+  - 移除 MutationObserver 设置
+  - 移除 `renderBooks()` 函数中的 scrollTop 设置
+  - 移除 `renderBooks()` 中 URL 滚动参数处理
+
+### 2. 使用 Map 实现单一数据源
+- **文件: static/index.html**
+  - 添加 `let bookMap = new Map();` 用于按 ID 存储书籍
+  - 更新 `fetchAllBooks()`, `fetchCategoryBooks()` 和 `fetchFavoriteBooks()` 函数，加载书籍后填充 `bookMap`
+  - 修改 `handleFavClick()` 函数，更新 `bookMap` 而不是 `currentBooks` 数组
+  - 更新 BroadcastChannel 监听器，使用 `bookMap` 进行状态更新
+
+### 3. 更新收藏数量计算
+- **文件: static/index.html**
+  - 创建 `updateFavoriteCount()` 函数，从 `bookMap` 计算收藏数量
+  - 替换手动计数增减，改为调用 `updateFavoriteCount()`
+  - 更新 BroadcastChannel 监听器，在状态变化时调用 `updateFavoriteCount()`
+
+### 4. 简化书籍卡片更新
+- **文件: static/index.html**
+  - 创建 `updateBookCard(bookId)` 函数，更新单个书籍卡片 UI
+  - 创建 `removeCard(bookId)` 函数，从收藏视图中移除卡片
+  - 更新 BroadcastChannel 监听器，使用这些函数
+
+### 5. 验证导航和 BroadcastChannel 使用
+- **文件: static/img_book_detail.html, static/pdf_book_detail.html**
+  - 确认 `openDetail()` 使用干净的 URL，不包含滚动参数
+  - 确认 `goBack()` 使用 `window.history.back()`
+  - 验证 BroadcastChannel 消息发送时带有适当的 50ms 延迟
+
+### 6. 测试和验证
+- 测试从详情页导航回时的滚动位置保存
+- 测试首页和详情页之间的收藏状态同步
+- 测试不同视图下的收藏数量更新
+- 测试首页和详情页中的收藏/取消收藏操作
+- 验证导航过程中没有视觉闪烁或滚动跳动
+
+### 预期结果
+- ✅ 使用浏览器原生 history.back() 正确保存滚动位置
+- ✅ 使用 BroadcastChannel 在所有页面之间同步收藏状态
+- ✅ 收藏数量始终准确，从单一数据源计算
+- ✅ 没有重复或冲突的滚动处理代码
+- ✅ 干净、可维护的代码架构

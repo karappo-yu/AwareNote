@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 详情 - Art Gallery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Viewer.js CSS (保留给缩略图点击使用) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'PingFang SC', sans-serif; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+
+        .glass-sidebar {
+            background: rgba(9, 9, 11, 0.9);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* --- 1. Viewer.js 自定义 (保留给缩略图预览) --- */
+        .viewer-container { background-color: rgba(0, 0, 0, 0.85) !important; backdrop-filter: blur(20px); z-index: 2000 !important; }
+        /* 为SVG内容添加白色背景 */
+        .viewer-canvas img { background-color: white !important; }
+        /* 为缩略图添加白色背景 */
+        .thumb-card img { background-color: white !important; }
+        .viewer-navbar, .viewer-title, .viewer-button, .viewer-player { display: none !important; }
+        .viewer-prev, .viewer-next { display: none !important; }
+        
+        /* 缩略图 Viewer 的工具栏 */
+        .viewer-toolbar {
+            position: fixed !important; bottom: 40px !important; left: 50% !important;
+            transform: translateX(-50%) translateY(40px) !important;
+            width: auto !important; height: auto !important; z-index: 2010 !important;
+            overflow: visible !important; opacity: 0 !important;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+            pointer-events: none !important;
+        }
+        .viewer-toolbar.visible { transform: translateX(-50%) translateY(0) !important; opacity: 1 !important; pointer-events: auto !important; }
+        .viewer-toolbar > ul { background: rgba(24, 24, 27, 0.6) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 50px !important; padding: 8px 24px !important; display: flex !important; gap: 12px !important; backdrop-filter: blur(10px); margin: 0 !important; }
+        .viewer-toolbar > ul > li { width: 40px !important; height: 40px !important; background-color: transparent !important; border-radius: 50% !important; transition: all 0.2s ease !important; display: flex !important; align-items: center !important; justify-content: center !important; }
+        .viewer-toolbar > ul > li:hover { background-color: rgba(255, 255, 255, 0.15) !important; transform: translateY(-2px); }
+        .viewer-toolbar > ul > li::before { margin: 0 !important; transform: scale(1.1); }
+        li.viewer-prev, li.viewer-next { display: none !important; }
+
+        /* --- 2. 缩略图翻页按钮 (保留) --- */
+        .nav-hit-zone { position: fixed; top: 0; bottom: 0; width: 15vw; z-index: 99999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .nav-hit-zone.left { left: 0; } .nav-hit-zone.right { right: 0; }
+        .nav-hit-zone.active { pointer-events: auto; }
+        .custom-nav-btn { width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.6); display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(8px); opacity: 0; transform: scale(0.8); transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        .nav-hit-zone:hover .custom-nav-btn { opacity: 1; transform: scale(1); background: rgba(255, 255, 255, 0.1); box-shadow: 0 0 30px rgba(0, 0, 0, 0.3); }
+        .custom-nav-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: rgba(255, 255, 255, 0.3); transform: scale(1.1); }
+        .custom-nav-btn:active { transform: scale(0.95); }
+
+        .thumb-card:hover img { transform: scale(1.04); }
+
+
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 overflow-hidden">
+
+    <!-- 1. 缩略图查看器的翻页按钮 -->
+    <div id="leftHitZone" class="nav-hit-zone left">
+        <button id="customPrevBtn" class="custom-nav-btn"><i data-lucide="chevron-left" class="w-10 h-10"></i></button>
+    </div>
+    <div id="rightHitZone" class="nav-hit-zone right">
+        <button id="customNextBtn" class="custom-nav-btn"><i data-lucide="chevron-right" class="w-10 h-10"></i></button>
+    </div>
+
+    <!-- 2. 主界面 -->
+    <div class="flex h-screen w-full">
+        <!-- 左侧：书籍面板 -->
+        <aside class="w-[360px] glass-sidebar flex flex-col z-20 shrink-0">
+            <div class="p-8 flex-1 overflow-y-auto custom-scrollbar">
+                <button onclick="goBack()" class="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-xs mb-8 group">
+                    <i data-lucide="arrow-left" class="w-4 h-4 transition-transform group-hover:-translate-x-1"></i>
+                    返回画廊
+                </button>
+
+                <div id="bookDetailContent" class="space-y-8">
+                    <div class="aspect-[3/4.2] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-zinc-900 relative">
+                        <img id="bookCover" src="" alt="封面" class="w-full h-full object-cover">
+                        <button id="favoriteBtn" onclick="toggleFavorite()" class="absolute top-3 right-3 w-10 h-10 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center text-zinc-400 hover:bg-black/60 hover:text-yellow-400 transition-all duration-300 transform hover:scale-110 group">
+                            <i data-lucide="heart" class="w-5 h-5 transition-all duration-500 group-hover:scale-125"></i>
+                        </button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <h1 id="bookTitle" class="text-2xl font-bold tracking-tight leading-tight">...</h1>
+                        <div class="flex gap-2 text-[10px] font-mono">
+                            <span id="pageCountLabel" class="px-2 py-1 bg-zinc-800 rounded border border-zinc-700 text-zinc-400 italic">-- PAGES</span>
+                            <span id="formatLabel" class="px-2 py-1 bg-indigo-500/10 rounded border border-indigo-500/20 text-indigo-400 font-bold">--</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <h3 class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">资料详情</h3>
+                        <p id="bookDescription" class="text-sm text-zinc-400 leading-relaxed">正在同步云端描述...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-zinc-900 bg-zinc-950/50">
+                <button onclick="openSwiperReader()" class="w-full py-4 bg-zinc-100 text-zinc-950 hover:bg-white transition-all rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 group">
+                    <i data-lucide="scroll-text" class="w-4 h-4 group-hover:animate-pulse"></i>
+                    开始沉浸阅读
+                </button>
+            </div>
+        </aside>
+
+        <!-- 右侧：目录网格 -->
+        <main class="flex-1 flex flex-col relative bg-zinc-950/20">
+            <header class="h-16 px-10 flex items-center justify-between border-b border-zinc-900/50 backdrop-blur-sm">
+                <span id="pageIndicator" class="text-[10px] font-mono text-zinc-500 uppercase tracking-[0.2em]">-- / --</span>
+                <div class="flex items-center gap-4">
+                    <!-- 每页数量选择器 -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-zinc-600">每页</span>
+                        <select id="pageSizeSelector" onchange="changePageSize(this.value)" class="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-[10px] text-zinc-400 focus:outline-none focus:border-zinc-600">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="30">30</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                        <span class="text-[10px] text-zinc-600">张</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="changePage(-1)" id="prevBtn" class="w-10 h-10 flex items-center justify-center text-zinc-500 hover:text-white disabled:opacity-5 transition-all"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                        <button onclick="changePage(1)" id="nextBtn" class="w-10 h-10 flex items-center justify-center text-zinc-500 hover:text-white disabled:opacity-5 transition-all"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                    </div>
+                </div>
+            </header>
+
+            <div id="scrollContainer" class="flex-1 overflow-y-auto p-10 custom-scrollbar">
+                <ul id="thumbnailGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+                    <!-- 动态渲染 -->
+                </ul>
+            </div>
+        </main>
+    </div>
+
+
+
+    <!-- Viewer.js 脚本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
+    
+    <script>
+        const API_BASE = '/api';
+        // 从URL路径中获取book_id
+        let bookId = null;
+        const pathParts = window.location.pathname.split('/');
+        if (pathParts.length >= 3 && pathParts[1] === 'pdf_book_detail' && pathParts[2]) {
+            bookId = pathParts[2];
+        } else {
+            // 保持向后兼容，从查询参数中获取
+            const params = new URLSearchParams(window.location.search);
+            bookId = params.get('id');
+        }
+        let currentBook = null;
+        let currentPageIndex = 0;
+        let pageSize = 20; // 默认每页20张，可从localStorage读取
+        let viewer = null;
+        
+        // 从localStorage读取每页数量设置
+        function loadPageSize() {
+            const saved = localStorage.getItem('detail_page_size');
+            if (saved) {
+                pageSize = parseInt(saved, 10);
+                // 更新选择器
+                const selector = document.getElementById('pageSizeSelector');
+                if (selector) {
+                    selector.value = pageSize.toString();
+                }
+            }
+        }
+        
+        // 保存每页数量到localStorage
+        function savePageSize(size) {
+            pageSize = parseInt(size, 10);
+            localStorage.setItem('detail_page_size', pageSize.toString());
+        }
+        
+        // 改变每页数量
+        function changePageSize(newSize) {
+            const oldPageSize = pageSize;
+            savePageSize(newSize);
+            
+            // 计算当前浏览到的图片索引
+            const currentImageIndex = currentPageIndex * oldPageSize;
+            
+            // 根据新的pageSize计算新的currentPageIndex
+            currentPageIndex = Math.floor(currentImageIndex / pageSize);
+            
+            // 保存新的浏览进度
+            saveThumbnailState();
+            
+            // 重新渲染
+            renderThumbnails();
+            document.getElementById('scrollContainer').scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Viewer.js 交互逻辑
+        const leftHitZone = document.getElementById('leftHitZone');
+        const rightHitZone = document.getElementById('rightHitZone');
+        const customPrevBtn = document.getElementById('customPrevBtn');
+        const customNextBtn = document.getElementById('customNextBtn');
+
+        function goBack() {
+            // 相信浏览器，原生回退是保留滚动条的最佳方案
+            window.history.back();
+        }
+
+        async function init() {
+            lucide.createIcons();
+            
+            // 先加载每页数量设置
+            loadPageSize();
+            
+            customPrevBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (viewer) {
+                const currentIndex = viewer.index;
+                const start = currentPageIndex * pageSize;
+                
+                // 如果是当前页的第一张图片，尝试切换到上一页
+                if (currentIndex === 0 && currentPageIndex > 0) {
+                    // 计算上一张图片的索引
+                    const prevImageIndex = start - 1;
+                    // 构建上一张SVG的URL
+                    const prevSvgUrl = `${API_BASE}/books/svg/${encodeURIComponent(currentBook.id)}/${prevImageIndex + 1}`;
+                    
+                    // 1. 创建临时图片元素，优先加载上一张SVG
+                    const tempImage = new Image();
+                    tempImage.src = prevSvgUrl;
+                    
+                    // 2. 等待图片加载完成或超时
+                    const imageLoaded = new Promise((resolve) => {
+                        tempImage.onload = () => resolve(true);
+                        tempImage.onerror = () => resolve(false);
+                        setTimeout(() => resolve(false), 3000); // 3秒超时
+                    });
+                    
+                    // 3. 加载SVG（同步加载，确保SVG先加载完成）
+                    await imageLoaded;
+                    
+                    // 4. 切换缩略图范围
+                    currentPageIndex--;
+                    // 保存浏览进度
+                    saveThumbnailState();
+                    await renderThumbnails();
+                    
+                    // 5. 显示上一页的最后一张图片
+                    if (viewer) {
+                        const end = Math.min(currentPageIndex * pageSize + pageSize, currentBook.page_count);
+                        const lastIndex = end - (currentPageIndex * pageSize) - 1;
+                        viewer.view(lastIndex);
+                    }
+                } else {
+                    viewer.prev();
+                }
+            }
+        });
+        
+        customNextBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (viewer) {
+                const currentIndex = viewer.index;
+                const start = currentPageIndex * pageSize;
+                const end = Math.min(start + pageSize, currentBook.page_count);
+                const pageLength = end - start;
+                
+                // 如果是当前页的最后一张图片，尝试切换到下一页
+                if (currentIndex === pageLength - 1 && end < currentBook.page_count) {
+                    // 计算下一张图片的索引
+                    const nextImageIndex = end;
+                    // 构建下一张SVG的URL
+                    const nextSvgUrl = `${API_BASE}/books/svg/${encodeURIComponent(currentBook.id)}/${nextImageIndex + 1}`;
+                    
+                    // 1. 创建临时图片元素，优先加载下一张SVG
+                    const tempImage = new Image();
+                    tempImage.src = nextSvgUrl;
+                    
+                    // 2. 等待图片加载完成或超时
+                    const imageLoaded = new Promise((resolve) => {
+                        tempImage.onload = () => resolve(true);
+                        tempImage.onerror = () => resolve(false);
+                        setTimeout(() => resolve(false), 3000); // 3秒超时
+                    });
+                    
+                    // 3. 加载SVG（同步加载，确保SVG先加载完成）
+                    await imageLoaded;
+                    
+                    // 4. 切换缩略图范围
+                    currentPageIndex++;
+                    // 保存浏览进度
+                    saveThumbnailState();
+                    await renderThumbnails();
+                    
+                    // 5. 显示下一页的第一张图片
+                    if (viewer) {
+                        viewer.view(0);
+                    }
+                } else {
+                    viewer.next();
+                }
+            }
+        });
+
+            if (!bookId) return;
+            await fetchBookDetail();
+        }
+
+
+
+        async function fetchBookDetail() {
+            try {
+                const response = await fetch(`${API_BASE}/books/${encodeURIComponent(bookId)}`);
+                currentBook = await response.json();
+                renderBookInfo();
+                // 直接从currentBook获取收藏状态
+                isFavorite = currentBook.is_favorite || false;
+                updateFavoriteButton();
+                // 恢复上次浏览的缩略图状态（包含页码和每页数量）
+                restoreThumbnailState();
+                renderThumbnails();
+            } catch (e) { console.error(e); }
+        }
+
+        // 保存缩略图浏览状态到localStorage（包含页码和每页数量）
+        function saveThumbnailState() {
+            if (!currentBook || !currentBook.id) return;
+            const key = `thumb_state_${currentBook.id}`;
+            const state = {
+                pageIndex: currentPageIndex,
+                pageSize: pageSize
+            };
+            localStorage.setItem(key, JSON.stringify(state));
+        }
+
+        // 从localStorage恢复缩略图浏览状态
+        function restoreThumbnailState() {
+            if (!currentBook || !currentBook.id) return;
+            const key = `thumb_state_${currentBook.id}`;
+            const savedState = localStorage.getItem(key);
+            if (savedState) {
+                try {
+                    const state = JSON.parse(savedState);
+                    // 如果保存的pageSize与当前不同，先应用保存的pageSize
+                    if (state.pageSize && state.pageSize !== pageSize) {
+                        pageSize = state.pageSize;
+                        // 更新选择器
+                        const selector = document.getElementById('pageSizeSelector');
+                        if (selector) {
+                            selector.value = pageSize.toString();
+                        }
+                    }
+                    // 恢复页码
+                    if (state.pageIndex !== undefined) {
+                        const totalPages = Math.ceil(currentBook.page_count / pageSize);
+                        if (state.pageIndex >= 0 && state.pageIndex < totalPages) {
+                            currentPageIndex = state.pageIndex;
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error restoring thumbnail state:', e);
+                }
+            }
+        }
+
+        function renderBookInfo() {
+            document.getElementById('bookCover').src = `${API_BASE}/books/covers/${encodeURIComponent(currentBook.id)}`;
+            document.getElementById('bookTitle').innerText = currentBook.title;
+            document.getElementById('pageCountLabel').innerText = `${currentBook.page_count} PAGES`;
+            document.getElementById('formatLabel').innerText = currentBook.type === 'pdf_book' ? 'PDF' : 'JPG';
+            document.getElementById('bookDescription').innerText = currentBook.description || "点击“开始沉浸阅读”进入无缝滚动模式，或点击右侧缩略图进入大图翻页模式。";
+            lucide.createIcons();
+        }
+
+        function renderThumbnails() {
+            const grid = document.getElementById('thumbnailGrid');
+            const total = currentBook.page_count;
+            const totalPages = Math.ceil(total / pageSize);
+            grid.innerHTML = '';
+
+            const start = currentPageIndex * pageSize;
+            const end = Math.min(start + pageSize, total);
+
+            for (let i = start; i < end; i++) {
+                const svgUrl = `${API_BASE}/books/svg/${encodeURIComponent(currentBook.id)}/${i+1}`;
+                
+                const li = document.createElement('li');
+                li.className = 'thumb-card group cursor-pointer space-y-3';
+                li.innerHTML = `
+                    <div class="relative aspect-[3/4.2] rounded-xl overflow-hidden bg-zinc-900 border border-white/5 shadow-2xl">
+                        <img src="${svgUrl}" data-original="${svgUrl}" class="w-full h-full object-cover transition-transform duration-700 group-hover:opacity-60">
+                    </div>
+                    <div class="flex items-center justify-between px-1">
+                        <span class="text-[9px] font-mono text-zinc-600 font-bold tracking-tighter">#${String(i+1).padStart(3, '0')}</span>
+                    </div>
+                `;
+                li.onclick = () => openGallery(i - start);
+                grid.appendChild(li);
+            }
+
+            if (viewer) viewer.destroy();
+            viewer = new Viewer(grid, {
+                url: 'data-original',
+                navbar: false, title: false, button: false, transition: false,
+                zoomable: true, movable: true, zoomRatio: 0.3,
+                toolbar: { zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1, prev: 0, next: 0, rotateLeft: 1, rotateRight: 1, flipHorizontal: 1, flipVertical: 1 },
+                viewed() { leftHitZone.classList.add('active'); rightHitZone.classList.add('active'); startMouseTracking(); },
+                hide() { leftHitZone.classList.remove('active'); rightHitZone.classList.remove('active'); stopMouseTracking(); const tb = document.querySelector('.viewer-toolbar'); if(tb) tb.classList.remove('visible'); }
+            });
+
+            document.getElementById('pageIndicator').innerText = `PAGE ${currentPageIndex + 1} / ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPageIndex === 0;
+            document.getElementById('nextBtn').disabled = currentPageIndex >= totalPages - 1;
+        }
+
+        // --- 鼠标追踪 (缩略图预览模式) ---
+        let mouseTrackHandler;
+        function startMouseTracking() {
+            mouseTrackHandler = (e) => {
+                const toolbar = document.querySelector('.viewer-toolbar');
+                if (!toolbar) return;
+                if (window.innerHeight - e.clientY < 120) toolbar.classList.add('visible');
+                else toolbar.classList.remove('visible');
+            };
+            document.addEventListener('mousemove', mouseTrackHandler);
+        }
+        function stopMouseTracking() {
+            if (mouseTrackHandler) document.removeEventListener('mousemove', mouseTrackHandler);
+        }
+
+        window.changePage = (delta) => {
+            currentPageIndex += delta;
+            // 保存浏览状态
+            saveThumbnailState();
+            renderThumbnails();
+            document.getElementById('scrollContainer').scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.openGallery = (idx) => { if(viewer) viewer.view(idx); };
+
+        // --- 收藏功能 ---
+        let isFavorite = false;
+        
+        async function toggleFavorite() {
+    const favoriteBtn = document.getElementById('favoriteBtn');
+    const heartIcon = favoriteBtn.querySelector('svg'); 
+    
+    favoriteBtn.classList.add('scale-90');
+    setTimeout(() => {
+        favoriteBtn.classList.remove('scale-90');
+    }, 150);
+    
+    try {
+        let response;
+        if (isFavorite) {
+            response = await fetch(`${API_BASE}/books/${encodeURIComponent(bookId)}/favorite`, {
+                method: 'DELETE'
+            });
+            if (response.ok) isFavorite = false;
+        } else {
+            response = await fetch(`${API_BASE}/books/${encodeURIComponent(bookId)}/favorite`, {
+                method: 'POST'
+            });
+            if (response.ok) isFavorite = true;
+        }
+
+        if (response.ok) {
+                // 1. 立即更新详情页本地按钮状态
+                updateFavoriteButton();
+                
+                // 2. 【核心新增】向首页发送广播同步状态
+                const syncChannel = new BroadcastChannel('gallery_sync');
+                syncChannel.postMessage({ 
+                    bookId: bookId, 
+                    isFavorite: isFavorite 
+                });
+                // 别关太快，给浏览器 50ms 反应时间
+                setTimeout(() => syncChannel.close(), 50);
+
+                if (heartIcon) {
+                    heartIcon.classList.add('scale-125');
+                    setTimeout(() => {
+                        heartIcon.classList.remove('scale-125');
+                    }, 200);
+                }
+            }
+    } catch (e) {
+        console.error('Error toggling favorite:', e);
+    }
+}
+        
+       function updateFavoriteButton() {
+    const favoriteBtn = document.getElementById('favoriteBtn');
+    
+    // 定义两种状态的 SVG 字符串（保持原有的样式类）
+    // 注意：我保留了 transition-all duration-500 group-hover:scale-125 这些原本在 i 标签上的类
+    const filledIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-heart w-5 h-5 transition-all duration-500 group-hover:scale-125"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
+    
+    const outlineIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-heart w-5 h-5 transition-all duration-500 group-hover:scale-125"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
+
+    if (isFavorite) {
+        favoriteBtn.classList.add('bg-yellow-500/20', 'border-yellow-500/30', 'text-yellow-400');
+        favoriteBtn.classList.remove('bg-black/40', 'border-white/20', 'text-zinc-400');
+        // 修改处：直接替换按钮的内容
+        favoriteBtn.innerHTML = filledIcon;
+    } else {
+        favoriteBtn.classList.remove('bg-yellow-500/20', 'border-yellow-500/30', 'text-yellow-400');
+        favoriteBtn.classList.add('bg-black/40', 'border-white/20', 'text-zinc-400');
+        // 修改处：直接替换按钮的内容
+        favoriteBtn.innerHTML = outlineIcon;
+    }
+}
+
+        // --- 打开 Swiper 阅读器 ---
+        function openSwiperReader() {
+            window.location.href = `/pdf_swiper/${encodeURIComponent(bookId)}`;
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

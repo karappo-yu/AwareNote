@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>艺术书籍浏览器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', 'PingFang SC', sans-serif; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+        
+        .book-card:hover .hover-overlay { opacity: 1; }
+        .book-card:hover img { transform: scale(1.05); }
+        
+        .category-active {
+            background-color: rgba(79, 70, 229, 0.15);
+            color: #818cf8 !important;
+        }
+
+        .sub-categories { transition: all 0.3s ease-in-out; }
+        .chevron-rotate { transition: transform 0.2s ease; }
+        .expanded > .group .chevron-rotate { transform: rotate(90deg); }
+        .collapsed > .sub-categories { display: none; }
+
+        /* 强制让头部始终在最顶层，防止内容穿透 */
+        header {
+            isolation: isolate;
+        }
+
+        /* 确保菜单打开时，它是一个实心的块 */
+        #sortMenu {
+            background-color: #18181b !important; /* 强制不透明色 */
+            pointer-events: auto; /* 确保菜单本身可以点击 */
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 overflow-hidden">
+
+    <div class="flex h-screen w-full">
+        <!-- 侧边栏 -->
+        <aside id="sidebar" class="w-80 bg-zinc-900 border-r border-zinc-800 flex flex-col transition-all duration-300 z-20">
+            <div class="p-6 flex items-center gap-3">
+                <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="library" class="w-5 h-5"></i>
+                </div>
+                <h1 class="text-lg font-bold tracking-tight text-zinc-200">Art Gallery</h1>
+            </div>
+
+            <!-- 搜索框 -->
+            <div class="px-4 mb-4">
+                <div class="relative group">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 group-focus-within:text-indigo-400 transition-colors"></i>
+                    <input type="text" id="searchInput" placeholder="快速查找书籍..." 
+                        class="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none">
+                </div>
+            </div>
+
+            <!-- 分类树 -->
+            <nav class="flex-1 overflow-y-auto px-3 space-y-1 custom-scrollbar">
+                <button id="allBooksBtn" onclick="fetchAllBooks(this)" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-800 text-zinc-400 transition-all mb-4">
+                    <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                    <span class="text-sm font-medium">所有资源库</span>
+                </button>
+                
+                <div class="text-xs font-semibold text-zinc-600 uppercase tracking-wide px-3 py-2">收藏</div>
+                <div id="favoriteCategoryContainer" class="space-y-1 mb-4">
+                    <button onclick="fetchFavoriteBooks(this)" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-800 text-zinc-400 transition-all">
+                        <i data-lucide="heart" class="w-4 h-4"></i>
+                        <span class="text-sm font-medium">我的收藏</span>
+                        <span id="favoriteBookCount" class="text-[10px] text-zinc-600 font-mono ml-auto">0</span>
+                    </button>
+                </div>
+                
+                <div class="text-xs font-semibold text-zinc-600 uppercase tracking-wide px-3 py-2">文件分类</div>
+                <div id="categoriesContainer" class="space-y-1"></div>
+            </nav>
+
+            <div class="p-4 border-t border-zinc-800 flex items-center justify-between text-[10px] text-zinc-600 font-mono">
+                <span>MODE: AGGREGATED COUNT</span>
+                <i data-lucide="save" class="w-3 h-3"></i>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="flex-1 flex flex-col min-w-0 bg-zinc-950">
+            <header class="h-16 border-b border-zinc-900 flex items-center justify-between px-8 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-[100]">
+                <div class="flex items-center gap-6">
+                    <!-- 排序按钮 -->
+                    <div class="relative">
+                        <button onclick="toggleSortMenu()" class="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400">
+                            <i data-lucide="sort-asc" class="w-5 h-5"></i>
+                        </button>
+                        <!-- 排序菜单 -->
+                        <div id="sortMenu" class="absolute left-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-[110] hidden">
+                            <div class="py-1">
+                                <button onclick="sortBooks('created_at', 'desc')" class="w-full text-left px-4 py-2 text-sm hover:bg-zinc-800 transition-colors">
+                                    最近添加
+                                </button>
+                                <button onclick="sortBooks('created_at', 'asc')" class="w-full text-left px-4 py-2 text-sm hover:bg-zinc-800 transition-colors">
+                                    最早添加
+                                </button>
+                                <button onclick="sortBooks('title', 'asc')" class="w-full text-left px-4 py-2 text-sm hover:bg-zinc-800 transition-colors">
+                                    标题 (A-Z)
+                                </button>
+                                <button onclick="sortBooks('title', 'desc')" class="w-full text-left px-4 py-2 text-sm hover:bg-zinc-800 transition-colors">
+                                    标题 (Z-A)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h2 id="currentCategoryTitle" class="text-sm font-semibold text-zinc-100 truncate max-w-[300px]">所有资源库</h2>
+                        <p id="bookCount" class="text-[11px] text-zinc-500">正在扫描索引...</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="window.location.href = '/config'" class="p-2 hover:bg-zinc-800 rounded-lg text-zinc-500" title="系统设置">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-8 custom-scrollbar" id="mainGridContainer" style="visibility: hidden;">
+                <div id="loading" class="h-full flex flex-col items-center justify-center gap-4">
+                    <div class="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-xs text-zinc-500 uppercase tracking-widest">Loading Library...</p>
+                </div>
+                
+                <div id="booksGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-7 gap-x-6 gap-y-10 hidden"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = '/api'; 
+        let currentBooks = [];
+        let bookMap = new Map(); // 单一数据源：id -> book
+        let rawCategories = []; 
+        let activeCategoryElement = null;
+        let expandedFolders = new Set(JSON.parse(localStorage.getItem('expandedFolders') || '[]'));
+
+        async function init() {
+            lucide.createIcons();
+            await loadCategories();
+            await loadFavoriteBooksCount();
+            const lastActiveId = localStorage.getItem('activeCategoryId');
+            if (lastActiveId && lastActiveId !== 'all') {
+                const lastActiveName = localStorage.getItem('activeCategoryName') || '分类';
+                if (lastActiveId === 'favorite') {
+                    fetchFavoriteBooks(null);
+                } else {
+                    fetchCategoryBooks(lastActiveId, lastActiveName, null);
+                }
+            } else {
+                fetchAllBooks(document.getElementById('allBooksBtn'));
+            }
+            // 显示主容器
+            const mainContainer = document.getElementById('mainGridContainer');
+            if (mainContainer) {
+                mainContainer.style.visibility = 'visible';
+                console.log('Main container visible');
+            }
+        }
+
+        async function loadFavoriteBooksCount() {
+            try {
+                const response = await fetch(`${API_BASE}/books/favorite/list?page_size=100`);
+                const data = await response.json();
+                const favoriteCount = data.total || 0;
+                document.getElementById('favoriteBookCount').innerText = favoriteCount;
+            } catch (error) { console.error('加载收藏书籍数量失败:', error); }
+        }
+
+        async function fetchFavoriteBooks(el) {
+            if(el) updateActiveState(el);
+            showLoading(true);
+            localStorage.setItem('activeCategoryId', 'favorite');
+            localStorage.setItem('activeCategoryName', '我的收藏');
+            localStorage.setItem('isCustomCategory', 'false');
+            document.getElementById('currentCategoryTitle').innerText = '我的收藏';
+            try {
+                const response = await fetch(`${API_BASE}/books/favorite/list?page_size=100`);
+                const data = await response.json();
+                currentBooks = data.items || [];
+                // 填充 bookMap 作为单一数据源
+                bookMap.clear();
+                currentBooks.forEach(book => bookMap.set(book.id, book));
+                renderBooks(currentBooks);
+                // 应用保存的排序设置
+                applySavedSort();
+            } catch (error) { showError('获取收藏书籍失败'); }
+            finally { showLoading(false); }
+        }
+
+       async function handleFavClick(event, bookId, currentStatus) {
+    event.stopPropagation();
+    
+    // 获取当前内存中该书的真实数据
+    const book = bookMap.get(bookId);
+    if (!book) return;
+
+    // 获取当前最新的收藏状态（优先取内存，没有则取传参）
+    const isCurrentlyFavorite = book.is_favorite ?? currentStatus;
+    
+    // 锁定点击，避免连点请求堆积
+    const icon = document.getElementById(`fav-icon-${bookId}`);
+    if (icon.classList.contains('pointer-events-none')) return;
+    icon.classList.add('pointer-events-none');
+
+    try {
+        let response;
+        if (!isCurrentlyFavorite) {
+            response = await fetch(`${API_BASE}/books/${bookId}/favorite`, { method: 'POST' });
+        } else {
+            response = await fetch(`${API_BASE}/books/${bookId}/favorite`, { method: 'DELETE' });
+        }
+        
+        if (response.ok) {
+            const newStatus = !isCurrentlyFavorite;
+            
+            // 1. 更新内存数据（这是最关键的一步，保证第二次点击拿到的值是对的）
+            book.is_favorite = newStatus;
+            
+            // 2. 更新 UI 样式
+            icon.setAttribute('fill', newStatus ? '#f59e0b' : 'none');
+            icon.setAttribute('stroke', newStatus ? '#f59e0b' : 'white');
+            icon.classList.toggle('text-yellow-500', newStatus);
+            icon.classList.toggle('text-white/50', !newStatus);
+            
+            // 3. 通知其他页面并更新计数
+            const syncChannel = new BroadcastChannel('gallery_sync');
+            syncChannel.postMessage({ bookId, isFavorite: newStatus });
+            syncChannel.close();
+            
+            // 更新收藏书籍数量
+            updateFavoriteCount();
+        }
+    } catch (error) {
+        console.error('处理收藏失败:', error);
+    } finally {
+        // 解锁点击
+        icon.classList.remove('pointer-events-none');
+    }
+}
+
+        function saveExpandedState() {
+            localStorage.setItem('expandedFolders', JSON.stringify(Array.from(expandedFolders)));
+        }
+
+        function expandFolder(id) {
+            const folderElement = document.getElementById(`folder-${id}`);
+            if (folderElement && !expandedFolders.has(id)) {
+                expandedFolders.add(id);
+                folderElement.classList.add('expanded');
+                folderElement.classList.remove('collapsed');
+                saveExpandedState();
+                lucide.createIcons();
+            }
+        }
+
+        function collapseFolder(id) {
+            const folderElement = document.getElementById(`folder-${id}`);
+            if (folderElement && expandedFolders.has(id)) {
+                expandedFolders.delete(id);
+                folderElement.classList.remove('expanded');
+                folderElement.classList.add('collapsed');
+                saveExpandedState();
+                lucide.createIcons();
+            }
+        }
+
+        function toggleFolder(id, event) {
+            if (event) event.stopPropagation();
+            if (expandedFolders.has(id)) collapseFolder(id);
+            else expandFolder(id);
+        }
+
+        function countBooksRecursive(category) {
+            let count = (category.books ? category.books.length : 0);
+            if (category.sub_categories) {
+                category.sub_categories.forEach(sub => { count += countBooksRecursive(sub); });
+            }
+            return count;
+        }
+
+        function getAllBooksRecursive(categoryId) {
+            let books = [];
+            const findAndCollect = (list) => {
+                for (const cat of list) {
+                    if (cat.id === categoryId || categoryId === null) {
+                        if (cat.books) books.push(...cat.books);
+                        if (cat.sub_categories) {
+                            const collectSub = (subs) => {
+                                for (const s of subs) {
+                                    if (s.books) books.push(...s.books);
+                                    if (s.sub_categories) collectSub(s.sub_categories);
+                                }
+                            };
+                            collectSub(cat.sub_categories);
+                        }
+                        return true;
+                    }
+                    if (cat.sub_categories && findAndCollect(cat.sub_categories)) return true;
+                }
+                return false;
+            };
+            findAndCollect(rawCategories);
+            const map = new Map();
+            return books.filter(item => !map.has(item.id) && map.set(item.id, true));
+        }
+
+        function buildCategoryHTML(category, level = 0) {
+            const hasSub = category.sub_categories && category.sub_categories.length > 0;
+            const isExpanded = expandedFolders.has(category.id);
+            const indent = level * 16;
+            const totalBooksCount = countBooksRecursive(category);
+
+            // 对子分类按名称排序
+            let sortedSubCategories = [];
+            if (hasSub) {
+                sortedSubCategories = [...category.sub_categories].sort((a, b) => a.name.localeCompare(b.name));
+            }
+
+            return `
+                <div id="folder-${category.id}" class="category-item ${isExpanded ? 'expanded' : 'collapsed'}">
+                    <div class="group flex items-center rounded-lg hover:bg-zinc-800/50 transition-all pr-3 mb-0.5">
+                        <div onclick="toggleFolder('${category.id}', event)" class="p-2 cursor-pointer hover:text-indigo-400 transition-colors" style="margin-left: ${indent}px">
+                            ${hasSub ? `<i data-lucide="chevron-right" class="w-3.5 h-3.5 text-zinc-500 chevron-rotate"></i>` : `<div class="w-3.5"></div>`}
+                        </div>
+                        <button onclick="handleNameClick('${category.id}', '${category.name}', this, ${hasSub})" 
+                            class="flex-1 flex items-center gap-2 py-2 text-left text-zinc-400 group-hover:text-zinc-100 overflow-hidden">
+                            <i data-lucide="${hasSub ? 'folder-tree' : 'folder'}" class="w-3.5 h-3.5 text-zinc-600 flex-shrink-0"></i>
+                            <span class="text-[13px] truncate font-medium flex-1">${category.name}</span>
+                            ${totalBooksCount > 0 ? `<span class="text-[10px] text-zinc-600 font-mono ml-2 group-hover:text-zinc-400">${totalBooksCount}</span>` : ''}
+                        </button>
+                    </div>
+                    ${hasSub ? `<div class="sub-categories">${sortedSubCategories.map(sub => buildCategoryHTML(sub, level + 1)).join('')}</div>` : ''}
+                </div>`;
+        }
+
+        function handleNameClick(id, name, el, hasSub) {
+            fetchCategoryBooks(id, name, el);
+            if (hasSub && !expandedFolders.has(id)) expandFolder(id);
+        }
+
+        async function loadCategories() {
+            try {
+                const response = await fetch(`${API_BASE}/categories`);
+                rawCategories = await response.json();
+                document.getElementById('categoriesContainer').innerHTML = rawCategories.map(cat => buildCategoryHTML(cat)).join('');
+                lucide.createIcons();
+                const lastActiveId = localStorage.getItem('activeCategoryId');
+                if (lastActiveId) {
+                    const activeBtn = document.querySelector(`[onclick*="handleNameClick('${lastActiveId}'"]`);
+                    if (activeBtn) updateActiveState(activeBtn);
+                }
+            } catch (error) { console.error('加载分类失败:', error); }
+        }
+
+        function updateActiveState(el) {
+            if (activeCategoryElement) activeCategoryElement.classList.remove('category-active');
+            const target = el.classList.contains('group') ? el : el.closest('.group');
+            if (target) { target.classList.add('category-active'); activeCategoryElement = target; }
+        }
+
+        async function fetchAllBooks(el) {
+            if(el) updateActiveState(el);
+            showLoading(true);
+            localStorage.setItem('activeCategoryId', 'all');
+            localStorage.setItem('isCustomCategory', 'false');
+            document.getElementById('currentCategoryTitle').innerText = '所有资源库';
+            try {
+                // 获取第一页数据，了解总页数
+                const firstPageResponse = await fetch(`${API_BASE}/books`);
+                const firstPageData = await firstPageResponse.json();
+                
+                let allBooks = firstPageData.items || [];
+                const totalPages = firstPageData.total_pages || 1;
+                
+                // 如果有更多页面，继续加载
+                if (totalPages > 1) {
+                    for (let page = 2; page <= totalPages; page++) {
+                        const response = await fetch(`${API_BASE}/books?page=${page}`);
+                        const data = await response.json();
+                        if (data.items) {
+                            allBooks = allBooks.concat(data.items);
+                        }
+                    }
+                }
+                
+                currentBooks = allBooks;
+                // 填充 bookMap 作为单一数据源
+                bookMap.clear();
+                currentBooks.forEach(book => bookMap.set(book.id, book));
+                renderBooks(currentBooks);
+                // 应用保存的排序设置
+                applySavedSort();
+            } catch (error) { showError('无法加载所有书籍'); }
+            finally { showLoading(false); }
+        }
+
+        async function fetchCategoryBooks(id, name, el) {
+            if(el) updateActiveState(el);
+            showLoading(true);
+            localStorage.setItem('activeCategoryId', id);
+            localStorage.setItem('activeCategoryName', name);
+            localStorage.setItem('isCustomCategory', 'false');
+            document.getElementById('currentCategoryTitle').innerText = name;
+            try {
+                const allRecursiveBooks = getAllBooksRecursive(id);
+                if (allRecursiveBooks.length === 0) {
+                    const response = await fetch(`${API_BASE}/categories/${encodeURIComponent(id)}/books`);
+                    const data = await response.json();
+                    currentBooks = Array.isArray(data) ? data : [];
+                } else { currentBooks = allRecursiveBooks; }
+                // 填充 bookMap 作为单一数据源
+                bookMap.clear();
+                currentBooks.forEach(book => bookMap.set(book.id, book));
+                renderBooks(currentBooks);
+                // 应用保存的排序设置
+                applySavedSort();
+            } catch (error) { showError('获取目录书籍失败'); }
+            finally { showLoading(false); }
+        }
+
+        function renderBooks(books) {
+            const grid = document.getElementById('booksGrid');
+            const countLabel = document.getElementById('bookCount');
+            
+            countLabel.innerText = books.length > 0 ? `共查找到 ${books.length} 本书籍 (包含子目录)` : '该目录下暂无书籍';
+
+            if (books.length === 0) {
+                grid.innerHTML = `<div class="col-span-full py-32 flex flex-col items-center justify-center text-zinc-700"><i data-lucide="ghost" class="w-12 h-12 mb-4 opacity-20"></i><p class="text-sm italic tracking-wide">未找到书籍</p></div>`;
+            } else {
+                grid.innerHTML = books.map(book => {
+                    const coverUrl = `${API_BASE}/books/covers/${encodeURIComponent(book.id)}`;
+                    const escapedId = book.id.replace(/'/g, "\\'");
+                    const bookType = book.type || 'image_book';
+                    return `
+                    <div class="book-card group flex flex-col cursor-pointer" onclick="openDetail('${escapedId}', '${bookType}')" data-book-id="${book.id}">
+                        <div class="relative aspect-[3/4.2] rounded-xl overflow-hidden bg-zinc-900 shadow-xl transition-all duration-300 ring-1 ring-white/5 group-hover:ring-indigo-500/50">
+                            <img src="${coverUrl}" alt="${book.title}" class="w-full h-full object-cover transition-transform duration-700 ease-out" loading="lazy">
+                            <div class="absolute top-2 right-2 z-10">
+                                <svg id="fav-icon-${book.id}" onclick="handleFavClick(event, '${book.id}', ${book.is_favorite || false})" width="20" height="20" viewBox="0 0 24 24" fill="${book.is_favorite ? '#f59e0b' : 'none'}" stroke="${book.is_favorite ? '#f59e0b' : 'white'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cursor-pointer transition-all hover:scale-110 ${book.is_favorite ? 'text-yellow-500' : 'text-white/50'}">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="mt-3 px-1">
+                            <h3 class="text-[12px] font-bold text-zinc-300 line-clamp-2 group-hover:text-indigo-400 transition-colors">${book.title}</h3>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            grid.classList.remove('hidden');
+            lucide.createIcons();
+        }
+        
+        // 应用保存的排序设置
+        function applySavedSort() {
+            const savedSortBy = localStorage.getItem('sortBy');
+            const savedSortOrder = localStorage.getItem('sortOrder');
+            
+            if (savedSortBy && savedSortOrder && currentBooks.length > 0) {
+                // 复制当前书籍数组以避免修改原始数据
+                let sortedBooks = [...currentBooks];
+                
+                // 执行排序
+                sortedBooks.sort(function(a, b) {
+                    let aValue = a[savedSortBy];
+                    let bValue = b[savedSortBy];
+                    
+                    // 处理空值
+                    if (aValue === null || aValue === undefined) return savedSortOrder === 'asc' ? -1 : 1;
+                    if (bValue === null || bValue === undefined) return savedSortOrder === 'asc' ? 1 : -1;
+                    
+                    // 处理字符串比较
+                    if (typeof aValue === 'string' && typeof bValue === 'string') {
+                        return savedSortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+                    }
+                    
+                    // 处理数字比较
+                    return savedSortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+                });
+                
+                // 重新渲染书籍
+                renderBooks(sortedBooks);
+            }
+        }
+
+        function showLoading(isLoading) {
+            document.getElementById('loading').classList.toggle('hidden', !isLoading);
+            document.getElementById('booksGrid').classList.toggle('hidden', isLoading);
+        }
+
+        function showError(msg) {
+            document.getElementById('mainGridContainer').innerHTML = `<div class="h-full flex flex-col items-center justify-center text-zinc-500"><i data-lucide="cloud-off" class="w-10 h-10 mb-4 text-red-500/30"></i><p class="text-sm">${msg}</p></div>`;
+            lucide.createIcons();
+        }
+
+        function updateFavoriteCount() {
+            const count = Array.from(bookMap.values())
+                .filter(book => book.is_favorite)
+                .length;
+            document.getElementById('favoriteBookCount').innerText = count;
+        }
+
+        function updateBookCard(bookId) {
+            const book = bookMap.get(bookId);
+            if (!book) return;
+
+            const icon = document.getElementById(`fav-icon-${bookId}`);
+            if (!icon) return;
+
+            const isFavorite = book.is_favorite;
+            icon.setAttribute('fill', isFavorite ? '#f59e0b' : 'none');
+            icon.setAttribute('stroke', isFavorite ? '#f59e0b' : 'white');
+            icon.classList.toggle('text-yellow-500', isFavorite);
+            icon.classList.toggle('text-white/50', !isFavorite);
+        }
+
+        function removeCard(bookId) {
+            const card = document.querySelector(`[data-book-id="${bookId}"]`);
+            if (!card) return;
+
+            // 优雅地移除卡片
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.9)';
+            setTimeout(() => card.remove(), 300);
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            renderBooks(currentBooks.filter(b => b.title.toLowerCase().includes(query)));
+        });
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            sb.classList.toggle('w-80'); sb.classList.toggle('w-0'); sb.classList.toggle('opacity-0');
+        }
+
+        // 排序菜单相关函数
+        function toggleSortMenu() {
+            const sortMenu = document.getElementById('sortMenu');
+            sortMenu.classList.toggle('hidden');
+        }
+
+        // 点击页面其他地方关闭排序菜单
+        document.addEventListener('click', function(event) {
+            const sortMenu = document.getElementById('sortMenu');
+            const sortButton = document.querySelector('button[onclick="toggleSortMenu()"]');
+            if (sortMenu && !sortMenu.classList.contains('hidden') && !sortButton.contains(event.target)) {
+                sortMenu.classList.add('hidden');
+            }
+        });
+
+        // 排序书籍
+        function sortBooks(sortBy, order) {
+            // 关闭排序菜单
+            document.getElementById('sortMenu').classList.add('hidden');
+            
+            // 保存排序选择到 localStorage
+            localStorage.setItem('sortBy', sortBy);
+            localStorage.setItem('sortOrder', order);
+            
+            // 复制当前书籍数组以避免修改原始数据
+            let sortedBooks = [...currentBooks];
+            
+            // 执行排序
+            sortedBooks.sort(function(a, b) {
+                let aValue = a[sortBy];
+                let bValue = b[sortBy];
+                
+                // 处理空值
+                if (aValue === null || aValue === undefined) return order === 'asc' ? -1 : 1;
+                if (bValue === null || bValue === undefined) return order === 'asc' ? 1 : -1;
+                
+                // 处理字符串比较
+                if (typeof aValue === 'string' && typeof bValue === 'string') {
+                    return order === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+                }
+                
+                // 处理数字比较
+                return order === 'asc' ? aValue - bValue : bValue - aValue;
+            });
+            
+            // 重新渲染书籍
+            renderBooks(sortedBooks);
+        }
+
+        function openDetail(bookId, bookType) {
+            // 根据书籍类型选择不同的详情页面
+            let detailPath = bookType === 'pdf_book' ? `/pdf_book_detail/` : `/img_book_detail/`;
+            // 纯净跳转，不带任何 ?scroll= 参数
+            window.location.href = `${detailPath}${encodeURIComponent(bookId)}`;
+        }
+
+        // 监听页面加载完成事件
+        window.onload = () => {
+            // 删掉所有和 scroll 相关的代码
+            init();
+        }
+        
+        // 首页监听逻辑
+        const syncChannel = new BroadcastChannel('gallery_sync');
+        syncChannel.onmessage = (event) => {
+            const { bookId, isFavorite } = event.data;
+            const activeId = localStorage.getItem('activeCategoryId');
+            
+            // 1. 同步内存数据
+            const book = bookMap.get(bookId);
+            if (book) book.is_favorite = isFavorite;
+
+            // 2. 核心交互逻辑
+            if (activeId === 'favorite' && !isFavorite) {
+                // 如果在收藏页取消了收藏，优雅地移除卡片
+                removeCard(bookId);
+            } else {
+                // 否则只更新爱心图标样式
+                updateBookCard(bookId);
+            }
+            
+            // 3. 更新收藏计数
+            updateFavoriteCount();
+        };
+        
+    </script>
+</body>
+</html>
