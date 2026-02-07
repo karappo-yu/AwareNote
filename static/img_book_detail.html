@@ -69,6 +69,9 @@
         <button id="customNextBtn" class="custom-nav-btn"><i data-lucide="chevron-right" class="w-10 h-10"></i></button>
     </div>
 
+    <!-- 2. 隐藏的预渲染容器 -->
+    <div id="preloadContainer" class="fixed top-0 left-0 w-1 h-1 overflow-hidden opacity-0 pointer-events-none z-10"></div>
+
     <!-- 2. 主界面 -->
     <div class="flex h-screen w-full">
         <!-- 左侧：书籍面板 -->
@@ -207,6 +210,58 @@
         const rightHitZone = document.getElementById('rightHitZone');
         const customPrevBtn = document.getElementById('customPrevBtn');
         const customNextBtn = document.getElementById('customNextBtn');
+        
+        // 预加载上一张和下一张图片的函数
+        function preloadAdjacentImages(currentImageIndex) {
+            if (!currentBook) return;
+            
+            // 预加载上一张图片
+            if (currentImageIndex > 0) {
+                const prevImageIndex = currentImageIndex - 1;
+                const prevImageUrl = `${API_BASE}/books/${encodeURIComponent(currentBook.id)}/${prevImageIndex + 1}?realsize=true`;
+                preloadImage(prevImageUrl);
+            }
+            
+            // 预加载下一张图片
+            if (currentImageIndex < currentBook.page_count - 1) {
+                const nextImageIndex = currentImageIndex + 1;
+                const nextImageUrl = `${API_BASE}/books/${encodeURIComponent(currentBook.id)}/${nextImageIndex + 1}?realsize=true`;
+                preloadImage(nextImageUrl);
+            }
+        }
+        
+        // 预加载单个图片的函数
+        function preloadImage(imageUrl) {
+            const tempImage = new Image();
+            tempImage.src = imageUrl;
+            
+            tempImage.onload = async () => {
+                try {
+                    // 强制解码，减少渲染瞬间的卡顿
+                    if (tempImage.decode) {
+                        await tempImage.decode();
+                    }
+                    
+                    // 在隐藏容器中实际渲染图片，确保GPU处理
+                    const preloadContainer = document.getElementById('preloadContainer');
+                    if (preloadContainer) {
+                        // 克隆图片元素并添加到隐藏容器
+                        const clonedImage = tempImage.cloneNode(true);
+                        clonedImage.style.width = '100%';
+                        clonedImage.style.height = '100%';
+                        preloadContainer.appendChild(clonedImage);
+                        
+                        // 等待一帧确保渲染完成
+                        await new Promise(resolve => requestAnimationFrame(resolve));
+                        
+                        // 清理临时图片
+                        preloadContainer.removeChild(clonedImage);
+                    }
+                } catch (e) {
+                    // 忽略解码或渲染错误
+                }
+            };
+        }
 
         function goBack() {
             // 相信浏览器，原生回退是保留滚动条的最佳方案
@@ -236,9 +291,35 @@
                     const tempImage = new Image();
                     tempImage.src = prevImageUrl;
                     
-                    // 2. 等待图片加载完成或超时
+                    // 2. 等待图片加载完成或超时，同时使用decode强制解码并在隐藏容器中渲染
                     const imageLoaded = new Promise((resolve) => {
-                        tempImage.onload = () => resolve(true);
+                        tempImage.onload = async () => {
+                            try {
+                                // 强制解码，减少渲染瞬间的卡顿
+                                if (tempImage.decode) {
+                                    await tempImage.decode();
+                                }
+                                
+                                // 在隐藏容器中实际渲染图片，确保GPU处理
+                                const preloadContainer = document.getElementById('preloadContainer');
+                                if (preloadContainer) {
+                                    // 克隆图片元素并添加到隐藏容器
+                                    const clonedImage = tempImage.cloneNode(true);
+                                    clonedImage.style.width = '100%';
+                                    clonedImage.style.height = '100%';
+                                    preloadContainer.appendChild(clonedImage);
+                                    
+                                    // 等待一帧确保渲染完成
+                                    await new Promise(resolve => requestAnimationFrame(resolve));
+                                    
+                                    // 清理临时图片
+                                    preloadContainer.removeChild(clonedImage);
+                                }
+                            } catch (e) {
+                                // 忽略解码或渲染错误
+                            }
+                            resolve(true);
+                        };
                         tempImage.onerror = () => resolve(false);
                         setTimeout(() => resolve(false), 3000); // 3秒超时
                     });
@@ -283,9 +364,35 @@
                     const tempImage = new Image();
                     tempImage.src = nextImageUrl;
                     
-                    // 2. 等待图片加载完成或超时
+                    // 2. 等待图片加载完成或超时，同时使用decode强制解码并在隐藏容器中渲染
                     const imageLoaded = new Promise((resolve) => {
-                        tempImage.onload = () => resolve(true);
+                        tempImage.onload = async () => {
+                            try {
+                                // 强制解码，减少渲染瞬间的卡顿
+                                if (tempImage.decode) {
+                                    await tempImage.decode();
+                                }
+                                
+                                // 在隐藏容器中实际渲染图片，确保GPU处理
+                                const preloadContainer = document.getElementById('preloadContainer');
+                                if (preloadContainer) {
+                                    // 克隆图片元素并添加到隐藏容器
+                                    const clonedImage = tempImage.cloneNode(true);
+                                    clonedImage.style.width = '100%';
+                                    clonedImage.style.height = '100%';
+                                    preloadContainer.appendChild(clonedImage);
+                                    
+                                    // 等待一帧确保渲染完成
+                                    await new Promise(resolve => requestAnimationFrame(resolve));
+                                    
+                                    // 清理临时图片
+                                    preloadContainer.removeChild(clonedImage);
+                                }
+                            } catch (e) {
+                                // 忽略解码或渲染错误
+                            }
+                            resolve(true);
+                        };
                         tempImage.onerror = () => resolve(false);
                         setTimeout(() => resolve(false), 3000); // 3秒超时
                     });
@@ -412,7 +519,19 @@
                 navbar: false, title: false, button: false, transition: false,
                 zoomable: true, movable: true, zoomRatio: 0.3,
                 toolbar: { zoomIn: 1, zoomOut: 1, oneToOne: 1, reset: 1, prev: 0, next: 0, rotateLeft: 1, rotateRight: 1, flipHorizontal: 1, flipVertical: 1 },
-                viewed() { leftHitZone.classList.add('active'); rightHitZone.classList.add('active'); startMouseTracking(); },
+                viewed() {
+                    leftHitZone.classList.add('active'); 
+                    rightHitZone.classList.add('active'); 
+                    startMouseTracking();
+                    
+                    // 预加载当前查看图片的上一张和下一张
+                    if (viewer && currentBook) {
+                        const currentIndexInViewer = viewer.index;
+                        const start = currentPageIndex * pageSize;
+                        const actualImageIndex = start + currentIndexInViewer;
+                        preloadAdjacentImages(actualImageIndex);
+                    }
+                },
                 hide() { leftHitZone.classList.remove('active'); rightHitZone.classList.remove('active'); stopMouseTracking(); const tb = document.querySelector('.viewer-toolbar'); if(tb) tb.classList.remove('visible'); }
             });
 
