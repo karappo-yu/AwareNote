@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/native-macos/build"
 DIST_DIR="$ROOT_DIR/native-macos/dist"
-APP_DIR="$DIST_DIR/awarenotes.app"
-SETTINGS_APP_DIR="$DIST_DIR/awarenotes-settings.app"
+APP_DIR="$DIST_DIR/AwareNote.app"
+SETTINGS_APP_DIR="$DIST_DIR/AwareNote Settings.app"
 
 mkdir -p "$BUILD_DIR" "$DIST_DIR"
 
@@ -29,7 +29,7 @@ cp "$ROOT_DIR/native-macos/SettingsInfo.plist" "$SETTINGS_APP_DIR/Contents/Info.
 cp "$BUILD_DIR/awarenotes-settings" "$SETTINGS_APP_DIR/Contents/MacOS/awarenotes-settings"
 cp "$ROOT_DIR/icon/AppIcon.icns" "$SETTINGS_APP_DIR/Contents/Resources/AppIcon.icns"
 
-cp -R "$SETTINGS_APP_DIR" "$APP_DIR/Contents/Resources/awarenotes-settings.app"
+cp -R "$SETTINGS_APP_DIR" "$APP_DIR/Contents/Resources/AwareNote Settings.app"
 
 chmod +x "$APP_DIR/Contents/MacOS/awarenotes"
 chmod +x "$SETTINGS_APP_DIR/Contents/MacOS/awarenotes-settings"

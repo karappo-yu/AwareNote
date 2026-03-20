@@ -294,13 +294,13 @@ mod macos_app {
         let bundled = current_exe
             .parent()
             .and_then(Path::parent)
-            .map(|path| path.join("Resources").join("awarenotes-settings.app"))
-            .unwrap_or_else(|| PathBuf::from("awarenotes-settings.app"));
+            .map(|path| path.join("Resources").join("AwareNote Settings.app"))
+            .unwrap_or_else(|| PathBuf::from("AwareNote Settings.app"));
         if bundled.exists() {
             bundled
         } else {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("native-macos/dist/awarenotes-settings.app")
+                .join("native-macos/dist/AwareNote Settings.app")
         }
     }
 

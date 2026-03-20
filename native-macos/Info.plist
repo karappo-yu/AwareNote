@@ -5,9 +5,9 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh_CN</string>
     <key>CFBundleDisplayName</key>
-    <string>awarenotes</string>
+    <string>AwareNote</string>
     <key>CFBundleExecutable</key>
-    <string>awarenotes</string>
+    <string>AwareNote</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon.icns</string>
     <key>CFBundleIdentifier</key>
