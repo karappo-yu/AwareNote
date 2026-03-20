@@ -1,0 +1,37 @@
+[server]
+app_name = "Auxm API"
+version = "1.0.0"
+host = "0.0.0.0"
+port = 3001
+log_level = "info"
+
+[database]
+url = "sqlite:auxm.db"
+
+[scanner]
+scan_paths = [
+    "/Users/mujica/Pictures/test",
+    "/Users/mujica/Pictures/test2",
+]
+image_extensions = [
+    "jpg",
+    "jpeg",
+    "png",
+    "webp",
+    "gif",
+]
+min_image_count = 2
+
+[cache]
+cover_width = 960
+image_page_preview_width = 1600
+oversized_image_avg_pixels = 10000000
+pdf_svg_width = 1400
+enable_pdf_page_svg_cache = true
+max_render_jobs = 4
+
+[internal]
+http_concurrency_limit = 128
+database_max_connections = 16
+database_min_connections = 1
+file_io_concurrency = 32
