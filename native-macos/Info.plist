@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>AwareNote</string>
     <key>CFBundleExecutable</key>
-    <string>AwareNote</string>
+    <string>awarenotes</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon.icns</string>
     <key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>awarenotes</string>
+    <string>AwareNote</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
