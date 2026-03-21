@@ -31,6 +31,8 @@ cp "$ROOT_DIR/icon/AppIcon.icns" "$SETTINGS_APP_DIR/Contents/Resources/AppIcon.i
 
 cp -R "$SETTINGS_APP_DIR" "$APP_DIR/Contents/Resources/AwareNote Settings.app"
 
+cp -R "$ROOT_DIR/src/frontend" "$APP_DIR/Contents/Resources/frontend"
+
 chmod +x "$APP_DIR/Contents/MacOS/awarenotes"
 chmod +x "$SETTINGS_APP_DIR/Contents/MacOS/awarenotes-settings"
 

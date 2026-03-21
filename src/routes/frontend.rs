@@ -8,8 +8,20 @@ use axum::Router;
 use std::path::PathBuf;
 use tower_http::services::{ServeDir, ServeFile};
 
+fn get_frontend_dir() -> PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(contents_idx) = exe_path.ancestors().nth(2) {
+            let resources_dir = contents_idx.join("Resources");
+            if resources_dir.join("frontend").exists() {
+                return resources_dir.join("frontend");
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/frontend")
+}
+
 pub fn routes() -> Router {
-    let frontend_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/frontend");
+    let frontend_dir = get_frontend_dir();
     let favicon_path = frontend_dir.join("favicon.ico");
 
     Router::new()
