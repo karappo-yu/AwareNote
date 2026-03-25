@@ -9,4 +9,4 @@ pub mod types;
 
 pub use engine::Scanner;
 pub use strategy::ConfigurableRecognizer;
-pub use types::ScanResult;
+pub use types::{CachedBookMetadata, ScanResult};

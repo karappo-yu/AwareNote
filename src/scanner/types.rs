@@ -26,6 +26,22 @@ pub struct ScannedBookFile {
     pub mtime: i64,
     pub page_count: i64,
     pub pages_json: Option<String>,
+    pub content_signature: Option<String>,
+    pub is_oversized: bool,
+    pub avg_page_pixels: i64,
+    pub cover_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedBookMetadata {
+    pub path: String,
+    pub title: Option<String>,
+    pub kind: String,
+    pub size: i64,
+    pub mtime: i64,
+    pub page_count: i64,
+    pub pages_json: Option<String>,
+    pub content_signature: Option<String>,
     pub is_oversized: bool,
     pub avg_page_pixels: i64,
     pub cover_path: Option<String>,

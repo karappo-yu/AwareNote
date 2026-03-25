@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS book_files (
     mtime INTEGER NOT NULL,
     page_count INTEGER NOT NULL,
     pages_json TEXT,
+    content_signature TEXT,
     is_oversized INTEGER NOT NULL DEFAULT 0,
     avg_page_pixels INTEGER NOT NULL DEFAULT 0,
     is_favorite INTEGER DEFAULT 0,

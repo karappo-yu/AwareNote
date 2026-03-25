@@ -255,7 +255,6 @@ impl AssetCacheService {
                 continue;
             }
 
-            on_progress(format!("生成封面 {}/{}: {}", index + 1, total, title));
             let result = match source_image_path.as_deref() {
                 Some(source_image_path) => {
                     self.get_or_create_image_cover(&book.path, source_image_path)

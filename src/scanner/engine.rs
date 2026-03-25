@@ -3,18 +3,36 @@
 //! 实现文件系统的递归扫描功能。
 
 use super::strategy::ConfigurableRecognizer;
-use super::types::{ScanResult, ScannedBookFile, ScannedCategory};
+use super::types::{CachedBookMetadata, ScanResult, ScannedBookFile, ScannedCategory};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
 pub struct Scanner<'a> {
     recognizer: &'a ConfigurableRecognizer,
+    existing_books: HashMap<String, CachedBookMetadata>,
 }
 
 impl<'a> Scanner<'a> {
     pub fn new(recognizer: &'a ConfigurableRecognizer) -> Self {
-        Self { recognizer }
+        Self {
+            recognizer,
+            existing_books: HashMap::new(),
+        }
+    }
+
+    pub fn with_existing_books(
+        recognizer: &'a ConfigurableRecognizer,
+        existing_books: Vec<CachedBookMetadata>,
+    ) -> Self {
+        Self {
+            recognizer,
+            existing_books: existing_books
+                .into_iter()
+                .map(|book| (book.path.clone(), book))
+                .collect(),
+        }
     }
 
     pub fn scan(&self, root: &Path) -> ScanResult {
@@ -32,7 +50,11 @@ impl<'a> Scanner<'a> {
         };
 
         if meta.is_dir() {
-            let inspection = self.recognizer.inspect_directory(root, &meta);
+            let inspection = self.recognizer.inspect_directory(
+                root,
+                &meta,
+                self.existing_books.get(&root.to_string_lossy().to_string()),
+            );
             categories.push(
                 inspection
                     .category
@@ -76,7 +98,11 @@ impl<'a> Scanner<'a> {
             if self.recognizer.is_hidden(path) {
                 return;
             }
-            let inspection = self.recognizer.inspect_directory(path, &meta);
+            let inspection = self.recognizer.inspect_directory(
+                path,
+                &meta,
+                self.existing_books.get(&path.to_string_lossy().to_string()),
+            );
             if let Some(category) = inspection.category {
                 categories.push(category);
             }
@@ -94,7 +120,11 @@ impl<'a> Scanner<'a> {
             return;
         }
 
-        if let Some(book) = self.recognizer.analyze_file(path, &meta) {
+        if let Some(book) = self.recognizer.analyze_file(
+            path,
+            &meta,
+            self.existing_books.get(&path.to_string_lossy().to_string()),
+        ) {
             book_files.push(book);
         }
     }

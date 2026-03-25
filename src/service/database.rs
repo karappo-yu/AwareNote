@@ -8,7 +8,7 @@
 
 use crate::config::{CacheConfig, ScannerConfig};
 use crate::domain::{book_files, categories, libraries};
-use crate::scanner::{ConfigurableRecognizer, ScanResult, Scanner};
+use crate::scanner::{CachedBookMetadata, ConfigurableRecognizer, ScanResult, Scanner};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectOptions, ConnectionTrait, DatabaseConnection, DbErr,
     EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, Statement, TransactionTrait,
@@ -225,6 +225,10 @@ impl DatabaseService {
                 "ALTER TABLE book_files ADD COLUMN is_oversized INTEGER NOT NULL DEFAULT 0",
             ),
             (
+                "content_signature",
+                "ALTER TABLE book_files ADD COLUMN content_signature TEXT",
+            ),
+            (
                 "avg_page_pixels",
                 "ALTER TABLE book_files ADD COLUMN avg_page_pixels INTEGER NOT NULL DEFAULT 0",
             ),
@@ -303,6 +307,7 @@ impl DatabaseService {
             mtime: sea_orm::Set(book.mtime),
             page_count: sea_orm::Set(book.page_count),
             pages_json: sea_orm::Set(book.pages_json),
+            content_signature: sea_orm::Set(book.content_signature),
             is_oversized: sea_orm::Set(book.is_oversized),
             avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
             is_favorite: sea_orm::Set(is_favorite),
@@ -338,7 +343,7 @@ impl DatabaseService {
     /// スキャンを実行してキャッシュを更新する
     pub async fn scan_and_refresh(&self) -> Result<SyncReport, DbErr> {
         let db_data = self.get_all().await?;
-        let scan_data = self.scan_all().await;
+        let scan_data = self.scan_all_with_existing(&db_data.book_files).await;
         self.sync(&db_data, &scan_data).await
     }
 
@@ -372,9 +377,29 @@ impl DatabaseService {
 
     /// 設定されたすべてのパスをスキャンする
     pub async fn scan_all(&self) -> ScanResult {
+        self.scan_all_with_existing(&[]).await
+    }
+
+    pub async fn scan_all_with_existing(&self, existing_books: &[book_files::Model]) -> ScanResult {
         let scanner_config = self.get_scanner_config();
         let cache_config = self.get_cache_config();
         let scan_paths = scanner_config.scan_paths.clone();
+        let existing_books: Vec<CachedBookMetadata> = existing_books
+            .iter()
+            .map(|book| CachedBookMetadata {
+                path: book.path.clone(),
+                title: book.title.clone(),
+                kind: book.kind.clone(),
+                size: book.size,
+                mtime: book.mtime,
+                page_count: book.page_count,
+                pages_json: book.pages_json.clone(),
+                content_signature: book.content_signature.clone(),
+                is_oversized: book.is_oversized,
+                avg_page_pixels: book.avg_page_pixels,
+                cover_path: book.cover_path.clone(),
+            })
+            .collect();
 
         let result = tokio::task::spawn_blocking(move || {
             let mut all_result = ScanResult {
@@ -385,7 +410,7 @@ impl DatabaseService {
             for scan_path in &scan_paths {
                 let recognizer =
                     ConfigurableRecognizer::from((scanner_config.clone(), cache_config.clone()));
-                let scanner = Scanner::new(&recognizer);
+                let scanner = Scanner::with_existing_books(&recognizer, existing_books.clone());
                 let scan_result = scanner.scan(Path::new(scan_path));
                 all_result.categories.extend(scan_result.categories);
                 all_result.book_files.extend(scan_result.book_files);
@@ -499,6 +524,7 @@ impl DatabaseService {
                             mtime: b.mtime,
                             page_count: b.page_count,
                             pages_json: b.pages_json.clone(),
+                            content_signature: b.content_signature.clone(),
                             is_oversized: b.is_oversized,
                             avg_page_pixels: b.avg_page_pixels,
                             is_favorite: db_book.is_favorite,
@@ -680,6 +706,7 @@ impl DatabaseService {
                     mtime: sea_orm::Set(book.mtime),
                     page_count: sea_orm::Set(book.page_count),
                     pages_json: sea_orm::Set(book.pages_json.clone()),
+                    content_signature: sea_orm::Set(book.content_signature.clone()),
                     is_oversized: sea_orm::Set(book.is_oversized),
                     avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
                     is_favorite: sea_orm::Set(false),
@@ -710,6 +737,7 @@ impl DatabaseService {
                 mtime: sea_orm::Set(updated_book.mtime),
                 page_count: sea_orm::Set(updated_book.page_count),
                 pages_json: sea_orm::Set(updated_book.pages_json.clone()),
+                content_signature: sea_orm::Set(updated_book.content_signature.clone()),
                 is_oversized: sea_orm::Set(updated_book.is_oversized),
                 avg_page_pixels: sea_orm::Set(updated_book.avg_page_pixels),
                 is_favorite: sea_orm::Set(updated_book.is_favorite),
@@ -887,6 +915,7 @@ fn book_requires_update(
         || db_book.size != scanned_book.size
         || db_book.page_count != scanned_book.page_count
         || db_book.pages_json != scanned_book.pages_json
+        || db_book.content_signature != scanned_book.content_signature
         || db_book.is_oversized != scanned_book.is_oversized
         || db_book.avg_page_pixels != scanned_book.avg_page_pixels
 }
@@ -989,4 +1018,84 @@ fn collect_descendant_category_ids(category_id: i64, categories: &[categories::M
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scanner::types::ScannedBookFile;
+
+    #[test]
+    fn book_requires_update_detects_content_signature_change() {
+        let db_book = book_files::Model {
+            id: 1,
+            category_id: 1,
+            path: "/library/book".to_string(),
+            title: Some("book".to_string()),
+            kind: "image_folder".to_string(),
+            size: 100,
+            mtime: 10,
+            page_count: 2,
+            pages_json: Some("[\"a\",\"b\"]".to_string()),
+            content_signature: Some("old-signature".to_string()),
+            is_oversized: false,
+            avg_page_pixels: 123,
+            is_favorite: false,
+            cover_path: Some("/library/book/a.png".to_string()),
+            created_at: None,
+        };
+
+        let scanned_book = ScannedBookFile {
+            path: db_book.path.clone(),
+            title: db_book.title.clone(),
+            kind: db_book.kind.clone(),
+            size: db_book.size,
+            mtime: db_book.mtime,
+            page_count: db_book.page_count,
+            pages_json: db_book.pages_json.clone(),
+            content_signature: Some("new-signature".to_string()),
+            is_oversized: db_book.is_oversized,
+            avg_page_pixels: db_book.avg_page_pixels,
+            cover_path: db_book.cover_path.clone(),
+        };
+
+        assert!(book_requires_update(&db_book, &scanned_book));
+    }
+
+    #[test]
+    fn book_requires_update_ignores_identical_scanned_book() {
+        let db_book = book_files::Model {
+            id: 1,
+            category_id: 1,
+            path: "/library/book".to_string(),
+            title: Some("book".to_string()),
+            kind: "pdf".to_string(),
+            size: 100,
+            mtime: 10,
+            page_count: 8,
+            pages_json: None,
+            content_signature: None,
+            is_oversized: false,
+            avg_page_pixels: 0,
+            is_favorite: false,
+            cover_path: None,
+            created_at: None,
+        };
+
+        let scanned_book = ScannedBookFile {
+            path: db_book.path.clone(),
+            title: db_book.title.clone(),
+            kind: db_book.kind.clone(),
+            size: db_book.size,
+            mtime: db_book.mtime,
+            page_count: db_book.page_count,
+            pages_json: db_book.pages_json.clone(),
+            content_signature: db_book.content_signature.clone(),
+            is_oversized: db_book.is_oversized,
+            avg_page_pixels: db_book.avg_page_pixels,
+            cover_path: db_book.cover_path.clone(),
+        };
+
+        assert!(!book_requires_update(&db_book, &scanned_book));
+    }
 }
