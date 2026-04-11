@@ -1,1 +1,0 @@
-import{C as e,J as t,h as n,z as r}from"./use-dark-MU6K0zjG.js";var i=e({name:`QCardSection`,props:{tag:{type:String,default:`div`},horizontal:Boolean},setup(e,{slots:i}){let a=r(()=>`q-card__section q-card__section--${e.horizontal===!0?`horiz row no-wrap`:`vert`}`);return()=>t(e.tag,{class:a.value},n(i.default))}});export{i as t};

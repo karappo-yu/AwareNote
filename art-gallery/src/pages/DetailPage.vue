@@ -588,8 +588,11 @@ const masonryLoading = ref(false)
 const masonrySentinel = ref<HTMLElement | null>(null)
 let scrollObserver: IntersectionObserver | null = null
 
-// 瀑布流列数控制
+// 瀑布流列数控制 — 跟随 settings store，刷新后也能拿到正确值
 const masonryColCountCustom = ref(settings.getNumber('masonry_cols', 3))
+watch(() => settings.loaded, (ready) => {
+  if (ready) masonryColCountCustom.value = settings.getNumber('masonry_cols', 3)
+})
 
 // 列数变化时保存到后端设置
 watch(masonryColCountCustom, (val) => {

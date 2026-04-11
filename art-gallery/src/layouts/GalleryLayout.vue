@@ -100,14 +100,12 @@ import { ref, onMounted, onActivated, nextTick } from 'vue'
 import { Dark, LocalStorage, useQuasar } from 'quasar'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { useLibrary } from '../stores/library'
-import { useSettings } from '../stores/settings'
 import CategoryTree from '../components/CategoryTree.vue'
 
 defineOptions({ name: 'GalleryLayout' })
 
 const drawer = ref(false)
 const library = useLibrary()
-const settings = useSettings()
 const $q = useQuasar()
 const route = useRoute()
 const router = useRouter()
@@ -150,7 +148,7 @@ onActivated(() => {
 })
 
 onMounted(async () => {
-  await Promise.all([library.fetchBooks(), library.fetchCategories(), settings.fetchSettings()])
+  await Promise.all([library.fetchBooks(), library.fetchCategories()])
 })
 </script>
 

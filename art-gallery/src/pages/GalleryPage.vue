@@ -241,6 +241,10 @@ import { coverUrl as coverUrlFn, bookFormat } from '../api'
 const library = useLibrary()
 const settings = useSettings()
 const viewMode = ref<'grid' | 'list' | 'masonry'>((settings.get('gallery_view_mode') as 'grid' | 'list' | 'masonry') || 'masonry')
+// settings 从后端加载完毕后，更新为持久化的视图模式
+watch(() => settings.loaded, (ready) => {
+  if (ready) viewMode.value = (settings.get('gallery_view_mode') as 'grid' | 'list' | 'masonry') || 'masonry'
+})
 const currentPage = ref(1)
 const perPage = 30
 const showBackToTop = ref(false)
