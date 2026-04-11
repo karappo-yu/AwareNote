@@ -21,6 +21,21 @@ impl PdfHelper {
         let document = Document::open(path).ok()?;
         document.page_count().ok()?.try_into().ok()
     }
+
+    /// 返回每页的原始宽高（单位：PDF point，即 1/72 inch）
+    pub fn page_dimensions(path: &str) -> Option<Vec<(u32, u32)>> {
+        let document = Document::open(path).ok()?;
+        let count: usize = document.page_count().ok()?.try_into().ok()?;
+        let mut dims = Vec::with_capacity(count);
+        for i in 0..count {
+            let page = document.load_page(i as i32).ok()?;
+            let bounds = page.bounds().ok()?;
+            let w = (bounds.x1 - bounds.x0).abs().max(1.0) as u32;
+            let h = (bounds.y1 - bounds.y0).abs().max(1.0) as u32;
+            dims.push((w, h));
+        }
+        Some(dims)
+    }
 }
 
 #[derive(Debug)]

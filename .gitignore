@@ -2,3 +2,12 @@
 .DS_Store
 .idea/
 auxm.db
+
+# Frontend (art-gallery)
+art-gallery/node_modules/
+art-gallery/dist/
+art-gallery/.quasar/
+
+# macOS app build
+native-macos/build/
+native-macos/dist/

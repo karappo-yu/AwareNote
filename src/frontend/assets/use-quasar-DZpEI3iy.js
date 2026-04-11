@@ -1,0 +1,1 @@
+import{X as e}from"./use-dark-MU6K0zjG.js";function t(){return e(`_q_`)}export{t};

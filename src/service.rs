@@ -43,4 +43,19 @@ CREATE TABLE IF NOT EXISTS book_files (
     created_at TEXT DEFAULT (strftime('%Y-%m-%d %H:%M:%S', 'now', '+8 hours')),
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS page_spreads (
+    book_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    next_file TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (book_id, filename)
+);
+
+CREATE TABLE IF NOT EXISTS user_data (
+    book_id TEXT NOT NULL DEFAULT '',
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (book_id, key)
+);
 "#;

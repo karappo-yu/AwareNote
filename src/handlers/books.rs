@@ -14,6 +14,7 @@ use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
 use crate::domain::book_files;
+use crate::domain::page_spreads;
 use crate::service::assets::PdfPageSvgAsset;
 use crate::{AppError, AppState};
 
@@ -211,6 +212,109 @@ pub async fn book_cover(
     file_response(&cached).await
 }
 
+/// GET /api/books/:id/pages — 返回图片包的页面文件名列表和尺寸
+#[derive(Serialize)]
+pub struct BookPagesResponse {
+    pub pages: Vec<PageInfo>,
+}
+
+#[derive(Serialize)]
+pub struct PageInfo {
+    pub filename: String,
+    pub w: Option<u32>,
+    pub h: Option<u32>,
+}
+
+pub async fn image_book_pages(
+    State(state): State<AppState>,
+    Path(book_id): Path<i64>,
+) -> Result<Json<BookPagesResponse>, AppError> {
+    let book = state
+        .db_service
+        .get_book(book_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("book {book_id}")))?;
+
+    let meta: Vec<crate::scanner::strategy::PageMeta> = book
+        .pages_meta_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default();
+
+    if book.kind == "pdf" {
+        // PDF 书籍：用序号作为 filename，尺寸从 pages_meta_json 取
+        let page_count = book.page_count as usize;
+        let pages: Vec<PageInfo> = (0..page_count)
+            .map(|i| {
+                let filename = (i + 1).to_string(); // 1-based page number
+                let (w, h) = meta.get(i).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None));
+                PageInfo { filename, w, h }
+            })
+            .collect();
+        return Ok(Json(BookPagesResponse { pages }));
+    }
+
+    let paths = page_paths(&book)?;
+    let pages: Vec<PageInfo> = paths
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let filename = std::path::Path::new(p)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+            let (w, h) = meta.get(i).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None));
+            PageInfo { filename, w, h }
+        })
+        .collect();
+    Ok(Json(BookPagesResponse { pages }))
+}
+
+/// GET /api/books/:id/page/:filename — 按文件名请求图片包页面
+pub async fn image_book_page_by_name(
+    State(state): State<AppState>,
+    Path((book_id, filename)): Path<(i64, String)>,
+    Query(query): Query<PageQuery>,
+) -> Result<Response<Body>, AppError> {
+    let book = state
+        .db_service
+        .get_book(book_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("book {book_id}")))?;
+    if book.kind == "pdf" {
+        return Err(AppError::BadRequest("not available for pdf books".to_string()));
+    }
+    let pages = page_paths(&book)?;
+    let page_path = pages
+        .iter()
+        .find(|p| {
+            std::path::Path::new(p)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n == filename)
+        })
+        .ok_or_else(|| AppError::NotFound(format!("page {filename}")))?;
+    if query.realsize.unwrap_or(false) || !book.is_oversized {
+        return file_response(std::path::Path::new(page_path)).await;
+    }
+    // 找到该文件名在 pages 中的索引，用于缓存 key
+    let page_index = pages
+        .iter()
+        .position(|p| {
+            std::path::Path::new(p)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n == filename)
+        })
+        .unwrap_or(0);
+    let cached = state
+        .asset_cache
+        .get_or_create_image_page_preview(&book.path, page_index, page_path)
+        .await?;
+    file_response(&cached).await
+}
+
 pub async fn image_book_page(
     State(state): State<AppState>,
     Path((book_id, page)): Path<(i64, usize)>,
@@ -333,6 +437,99 @@ fn first_image_path(book: &book_files::Model) -> Option<String> {
     page_paths(book)
         .ok()
         .and_then(|pages| pages.into_iter().next())
+}
+
+// ============== Spread API ==============
+
+#[derive(Serialize)]
+pub struct SpreadResponse {
+    pub book_id: String,
+    pub filename: String,
+    pub next_file: String,
+    pub created_at: i64,
+}
+
+impl From<page_spreads::Model> for SpreadResponse {
+    fn from(m: page_spreads::Model) -> Self {
+        SpreadResponse {
+            book_id: m.book_id,
+            filename: m.filename,
+            next_file: m.next_file,
+            created_at: m.created_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct SpreadListResponse {
+    pub spreads: Vec<SpreadResponse>,
+}
+
+/// GET /api/books/:id/spreads
+pub async fn list_spreads(
+    State(state): State<AppState>,
+    Path(book_id): Path<i64>,
+) -> Result<Json<SpreadListResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    let spreads = state.db_service.get_spreads(&book_id_str).await?;
+    Ok(Json(SpreadListResponse {
+        spreads: spreads.into_iter().map(SpreadResponse::from).collect(),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct CreateSpreadRequest {
+    pub filename: String,
+    pub next_file: String,
+}
+
+#[derive(Serialize)]
+pub struct CreateSpreadResponse {
+    pub success: bool,
+    pub spread: SpreadResponse,
+}
+
+/// POST /api/books/:id/spreads
+pub async fn create_spread(
+    State(state): State<AppState>,
+    Path(book_id): Path<i64>,
+    Json(body): Json<CreateSpreadRequest>,
+) -> Result<Json<CreateSpreadResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    // 校验书籍存在
+    let _book = state
+        .db_service
+        .get_book(book_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("book {book_id}")))?;
+    let spread = state
+        .db_service
+        .create_spread(&book_id_str, &body.filename, &body.next_file)
+        .await?;
+    Ok(Json(CreateSpreadResponse {
+        success: true,
+        spread: SpreadResponse::from(spread),
+    }))
+}
+
+#[derive(Serialize)]
+pub struct DeleteSpreadResponse {
+    pub success: bool,
+}
+
+/// DELETE /api/books/:id/spreads/:filename
+pub async fn delete_spread(
+    State(state): State<AppState>,
+    Path((book_id, filename)): Path<(i64, String)>,
+) -> Result<Json<DeleteSpreadResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    let deleted = state.db_service.delete_spread(&book_id_str, &filename).await?;
+    if !deleted {
+        return Err(AppError::NotFound(format!(
+            "spread for book {book_id} filename {filename}"
+        )));
+    }
+    Ok(Json(DeleteSpreadResponse { success: true }))
 }
 
 fn file_stem(path: &str) -> String {

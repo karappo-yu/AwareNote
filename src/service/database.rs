@@ -7,7 +7,7 @@
 //! ローカルファイルとデータベースの同期を含む、データベース操作サービスを提供します。
 
 use crate::config::{CacheConfig, ScannerConfig};
-use crate::domain::{book_files, categories, libraries};
+use crate::domain::{book_files, categories, libraries, page_spreads, user_data};
 use crate::scanner::{CachedBookMetadata, ConfigurableRecognizer, ScanResult, Scanner};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectOptions, ConnectionTrait, DatabaseConnection, DbErr,
@@ -232,6 +232,10 @@ impl DatabaseService {
                 "avg_page_pixels",
                 "ALTER TABLE book_files ADD COLUMN avg_page_pixels INTEGER NOT NULL DEFAULT 0",
             ),
+            (
+                "pages_meta_json",
+                "ALTER TABLE book_files ADD COLUMN pages_meta_json TEXT",
+            ),
         ];
 
         for (column, sql) in alters {
@@ -307,6 +311,7 @@ impl DatabaseService {
             mtime: sea_orm::Set(book.mtime),
             page_count: sea_orm::Set(book.page_count),
             pages_json: sea_orm::Set(book.pages_json),
+            pages_meta_json: sea_orm::Set(book.pages_meta_json),
             content_signature: sea_orm::Set(book.content_signature),
             is_oversized: sea_orm::Set(book.is_oversized),
             avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
@@ -394,6 +399,7 @@ impl DatabaseService {
                 mtime: book.mtime,
                 page_count: book.page_count,
                 pages_json: book.pages_json.clone(),
+                pages_meta_json: book.pages_meta_json.clone(),
                 content_signature: book.content_signature.clone(),
                 is_oversized: book.is_oversized,
                 avg_page_pixels: book.avg_page_pixels,
@@ -524,6 +530,7 @@ impl DatabaseService {
                             mtime: b.mtime,
                             page_count: b.page_count,
                             pages_json: b.pages_json.clone(),
+                            pages_meta_json: b.pages_meta_json.clone(),
                             content_signature: b.content_signature.clone(),
                             is_oversized: b.is_oversized,
                             avg_page_pixels: b.avg_page_pixels,
@@ -706,6 +713,7 @@ impl DatabaseService {
                     mtime: sea_orm::Set(book.mtime),
                     page_count: sea_orm::Set(book.page_count),
                     pages_json: sea_orm::Set(book.pages_json.clone()),
+                    pages_meta_json: sea_orm::Set(book.pages_meta_json.clone()),
                     content_signature: sea_orm::Set(book.content_signature.clone()),
                     is_oversized: sea_orm::Set(book.is_oversized),
                     avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
@@ -737,6 +745,7 @@ impl DatabaseService {
                 mtime: sea_orm::Set(updated_book.mtime),
                 page_count: sea_orm::Set(updated_book.page_count),
                 pages_json: sea_orm::Set(updated_book.pages_json.clone()),
+                pages_meta_json: sea_orm::Set(updated_book.pages_meta_json.clone()),
                 content_signature: sea_orm::Set(updated_book.content_signature.clone()),
                 is_oversized: sea_orm::Set(updated_book.is_oversized),
                 avg_page_pixels: sea_orm::Set(updated_book.avg_page_pixels),
@@ -825,7 +834,144 @@ impl DatabaseService {
 
         txn.commit().await?;
 
+        // 清理已删除书籍的孤儿 spread 记录
+        let existing_book_ids: Vec<String> = self.list_all_books(true).await?.iter().map(|b| b.id.to_string()).collect();
+        let orphan_count = self.cleanup_orphan_spreads(&existing_book_ids).await?;
+        if orphan_count > 0 {
+            tracing::info!("cleaned up {orphan_count} orphan spread records");
+        }
+
         Ok(report)
+    }
+
+    /// 获取某本书的所有 spread 标记
+    pub async fn get_spreads(&self, book_id: &str) -> Result<Vec<page_spreads::Model>, DbErr> {
+        page_spreads::Entity::find()
+            .filter(page_spreads::Column::BookId.eq(book_id))
+            .all(&self.db)
+            .await
+    }
+
+    /// 创建 spread 标记
+    pub async fn create_spread(
+        &self,
+        book_id: &str,
+        filename: &str,
+        next_file: &str,
+    ) -> Result<page_spreads::Model, DbErr> {
+        let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs() as i64,
+            Err(err) => {
+                tracing::warn!("system clock is before UNIX_EPOCH: {}", err);
+                0
+            }
+        };
+        let active_model = page_spreads::ActiveModel {
+            book_id: sea_orm::Set(book_id.to_string()),
+            filename: sea_orm::Set(filename.to_string()),
+            next_file: sea_orm::Set(next_file.to_string()),
+            created_at: sea_orm::Set(now),
+        };
+        active_model.insert(&self.db).await
+    }
+
+    /// 删除 spread 标记
+    pub async fn delete_spread(
+        &self,
+        book_id: &str,
+        filename: &str,
+    ) -> Result<bool, DbErr> {
+        let result = page_spreads::Entity::delete_by_id((book_id.to_string(), filename.to_string()))
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected > 0)
+    }
+
+    /// 清理已删除书籍的孤儿 spread 记录
+    pub async fn cleanup_orphan_spreads(&self, existing_book_ids: &[String]) -> Result<usize, DbErr> {
+        if existing_book_ids.is_empty() {
+            return Ok(0);
+        }
+        let all_spreads = page_spreads::Entity::find().all(&self.db).await?;
+        let book_id_set: std::collections::HashSet<&str> =
+            existing_book_ids.iter().map(|s| s.as_str()).collect();
+        let mut deleted = 0;
+        for spread in &all_spreads {
+            if !book_id_set.contains(spread.book_id.as_str()) {
+                page_spreads::Entity::delete_by_id((spread.book_id.clone(), spread.filename.clone()))
+                    .exec(&self.db)
+                    .await?;
+                deleted += 1;
+            }
+        }
+        Ok(deleted)
+    }
+
+    // ============== User Data ==============
+
+    /// 获取指定 book_id 的所有用户数据
+    pub async fn get_user_data(&self, book_id: &str) -> Result<Vec<user_data::Model>, DbErr> {
+        user_data::Entity::find()
+            .filter(user_data::Column::BookId.eq(book_id))
+            .all(&self.db)
+            .await
+    }
+
+    /// 获取指定 book_id + key 的单条用户数据
+    pub async fn get_user_data_item(
+        &self,
+        book_id: &str,
+        key: &str,
+    ) -> Result<Option<user_data::Model>, DbErr> {
+        user_data::Entity::find_by_id((book_id.to_string(), key.to_string()))
+            .one(&self.db)
+            .await
+    }
+
+    /// 设置用户数据（upsert：存在则更新，不存在则插入）
+    pub async fn set_user_data(
+        &self,
+        book_id: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<user_data::Model, DbErr> {
+        let existing = self.get_user_data_item(book_id, key).await?;
+        if let Some(model) = existing {
+            let mut active_model: user_data::ActiveModel = model.into();
+            active_model.value = sea_orm::Set(value.to_string());
+            active_model.update(&self.db).await
+        } else {
+            let active_model = user_data::ActiveModel {
+                book_id: sea_orm::Set(book_id.to_string()),
+                key: sea_orm::Set(key.to_string()),
+                value: sea_orm::Set(value.to_string()),
+            };
+            active_model.insert(&self.db).await
+        }
+    }
+
+    /// 批量设置用户数据
+    pub async fn set_user_data_batch(
+        &self,
+        book_id: &str,
+        items: &[(String, String)],
+    ) -> Result<(), DbErr> {
+        for (key, value) in items {
+            self.set_user_data(book_id, key, value).await?;
+        }
+        Ok(())
+    }
+
+    /// 删除指定用户数据
+    pub async fn delete_user_data(
+        &self,
+        book_id: &str,
+        key: &str,
+    ) -> Result<bool, DbErr> {
+        let result = user_data::Entity::delete_by_id((book_id.to_string(), key.to_string()))
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected > 0)
     }
 
     /// library レコードを挿入する
@@ -914,7 +1060,8 @@ fn book_requires_update(
     db_book.mtime != scanned_book.mtime
         || db_book.size != scanned_book.size
         || db_book.page_count != scanned_book.page_count
-        || db_book.pages_json != scanned_book.pages_json
+        ||     db_book.pages_json != scanned_book.pages_json
+        || db_book.pages_meta_json != scanned_book.pages_meta_json
         || db_book.content_signature != scanned_book.content_signature
         || db_book.is_oversized != scanned_book.is_oversized
         || db_book.avg_page_pixels != scanned_book.avg_page_pixels
@@ -1037,6 +1184,7 @@ mod tests {
             mtime: 10,
             page_count: 2,
             pages_json: Some("[\"a\",\"b\"]".to_string()),
+            pages_meta_json: None,
             content_signature: Some("old-signature".to_string()),
             is_oversized: false,
             avg_page_pixels: 123,
@@ -1053,6 +1201,7 @@ mod tests {
             mtime: db_book.mtime,
             page_count: db_book.page_count,
             pages_json: db_book.pages_json.clone(),
+            pages_meta_json: None,
             content_signature: Some("new-signature".to_string()),
             is_oversized: db_book.is_oversized,
             avg_page_pixels: db_book.avg_page_pixels,
@@ -1074,6 +1223,7 @@ mod tests {
             mtime: 10,
             page_count: 8,
             pages_json: None,
+            pages_meta_json: None,
             content_signature: None,
             is_oversized: false,
             avg_page_pixels: 0,
@@ -1090,6 +1240,7 @@ mod tests {
             mtime: db_book.mtime,
             page_count: db_book.page_count,
             pages_json: db_book.pages_json.clone(),
+            pages_meta_json: None,
             content_signature: db_book.content_signature.clone(),
             is_oversized: db_book.is_oversized,
             avg_page_pixels: db_book.avg_page_pixels,

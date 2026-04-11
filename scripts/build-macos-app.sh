@@ -6,9 +6,23 @@ BUILD_DIR="$ROOT_DIR/native-macos/build"
 DIST_DIR="$ROOT_DIR/native-macos/dist"
 APP_DIR="$DIST_DIR/AwareNote.app"
 SETTINGS_APP_DIR="$DIST_DIR/AwareNote Settings.app"
+FRONTEND_DIR="$ROOT_DIR/art-gallery"
+STATIC_DIR="$ROOT_DIR/src/frontend"
 
 mkdir -p "$BUILD_DIR" "$DIST_DIR"
 
+# ── 构建前端 ──
+echo "==> Building frontend..."
+cd "$FRONTEND_DIR"
+npm run build
+
+echo "==> Copying frontend dist to backend static dir..."
+# 清理旧产物（保留 favicon.ico）
+rm -rf "$STATIC_DIR/assets" "$STATIC_DIR/icons.svg" "$STATIC_DIR/index.html"
+cp -R "$FRONTEND_DIR/dist/"* "$STATIC_DIR/"
+
+# ── 构建后端 ──
+echo "==> Building backend..."
 cargo build --release --bin awarenotes --manifest-path "$ROOT_DIR/Cargo.toml"
 
 swiftc \

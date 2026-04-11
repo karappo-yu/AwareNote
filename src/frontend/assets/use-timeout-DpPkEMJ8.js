@@ -1,0 +1,1 @@
+import{$ as e,q as t,s as n,tt as r}from"./use-dark-MU6K0zjG.js";function i(){let i=null,a=t();function o(){i!==null&&(clearTimeout(i),i=null)}return r(o),e(o),{removeTimeout:o,registerTimeout(e,t){o(),n(a)===!1&&(i=setTimeout(()=>{i=null,e()},t))}}}export{i as t};

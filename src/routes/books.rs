@@ -4,7 +4,7 @@
 
 use crate::AppState;
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 
@@ -33,6 +33,23 @@ pub fn routes(state: AppState) -> Router {
         .route(
             "/api/books/covers/:id",
             get(crate::handlers::books::book_cover),
+        )
+        .route(
+            "/api/books/:id/pages",
+            get(crate::handlers::books::image_book_pages),
+        )
+        .route(
+            "/api/books/:id/spreads",
+            get(crate::handlers::books::list_spreads)
+                .post(crate::handlers::books::create_spread),
+        )
+        .route(
+            "/api/books/:id/spreads/:filename",
+            delete(crate::handlers::books::delete_spread),
+        )
+        .route(
+            "/api/books/:id/page/:filename",
+            get(crate::handlers::books::image_book_page_by_name),
         )
         .route(
             "/api/books/:id/:page",

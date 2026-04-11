@@ -169,21 +169,27 @@ fn fill_pdf_book_model(
 
     let size = metadata.len() as i64;
 
-    let (page_count, pages_json, content_signature, cover_path, is_oversized, avg_page_pixels) =
+    let (page_count, pages_json, pages_meta_json, content_signature, cover_path, is_oversized, avg_page_pixels) =
         if let Some(cached) = existing_book.filter(|cached| {
-            cached.kind == PDF_KIND && cached.mtime == mtime && cached.size == size
+            cached.kind == PDF_KIND && cached.mtime == mtime && cached.size == size && cached.pages_meta_json.is_some()
         }) {
             (
                 cached.page_count,
                 cached.pages_json.clone(),
+                cached.pages_meta_json.clone(),
                 cached.content_signature.clone(),
                 cached.cover_path.clone(),
                 cached.is_oversized,
                 cached.avg_page_pixels,
             )
         } else {
-            let count = count_pdf_pages(path).unwrap_or(0) as i64;
-            (count, None, None, None, false, 0)
+            let dims = PdfHelper::page_dimensions(&path.to_string_lossy());
+            let count = dims.as_ref().map(|d| d.len()).unwrap_or_else(|| count_pdf_pages(path).unwrap_or(0)) as i64;
+            let meta_json = dims.map(|d| {
+                let meta: Vec<PageMeta> = d.into_iter().map(|(w, h)| PageMeta { w, h }).collect();
+                serde_json::to_string(&meta).ok()
+            }).flatten();
+            (count, None, meta_json, None, None, false, 0)
         };
 
     ScannedBookFile {
@@ -197,6 +203,7 @@ fn fill_pdf_book_model(
         mtime,
         page_count,
         pages_json,
+        pages_meta_json,
         content_signature,
         is_oversized,
         avg_page_pixels,
@@ -218,7 +225,7 @@ fn fill_image_book_model(
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let size = metadata.len() as i64;
-    let (page_count, pages_json, cover_path, content_signature, is_oversized, avg_page_pixels) =
+    let (page_count, pages_json, pages_meta_json, cover_path, content_signature, is_oversized, avg_page_pixels) =
         fill_image_book_payload_from_images(recognizer, images, existing_book, mtime, size);
 
     ScannedBookFile {
@@ -232,6 +239,7 @@ fn fill_image_book_model(
         mtime,
         page_count,
         pages_json,
+        pages_meta_json,
         content_signature,
         is_oversized,
         avg_page_pixels,
@@ -243,21 +251,57 @@ fn fill_image_book_payload_from_images(
     recognizer: &ConfigurableRecognizer,
     images: Vec<ImageEntry>,
     existing_book: Option<&CachedBookMetadata>,
-    _mtime: i64,
-    _size: i64,
+    mtime: i64,
+    size: i64,
 ) -> (
     i64,
+    Option<String>,
     Option<String>,
     Option<String>,
     Option<String>,
     bool,
     i64,
 ) {
+    // 先计算 content_signature（轻量：只基于文件名+mtime+size 的 hash）
+    let content_signature = Some(build_image_folder_signature(&images));
+
+    // 缓存命中：签名未变且已有尺寸数据，直接复用
+    if let Some(cached) = existing_book.filter(|cached| {
+        cached.kind == IMAGE_FOLDER_KIND
+            && cached.content_signature == content_signature
+            && cached.pages_meta_json.is_some()
+    }) {
+        return (
+            cached.page_count,
+            cached.pages_json.clone(),
+            cached.pages_meta_json.clone(),
+            cached.cover_path.clone(),
+            cached.content_signature.clone(),
+            cached.is_oversized,
+            cached.avg_page_pixels,
+        );
+    }
+
     let cover = images.first().map(|entry| entry.path.clone());
     let image_paths: Vec<String> = images.iter().map(|entry| entry.path.clone()).collect();
     let count = image_paths.len();
     let json = serde_json::to_string(&image_paths).ok();
-    let content_signature = Some(build_image_folder_signature(&images));
+
+    // 解析每张图片的宽高
+    let meta: Vec<PageMeta> = image_paths
+        .iter()
+        .filter_map(|p| {
+            image::image_dimensions(p)
+                .ok()
+                .map(|(w, h)| PageMeta { w, h })
+        })
+        .collect();
+    let meta_json = if meta.len() == count {
+        serde_json::to_string(&meta).ok()
+    } else {
+        None // 尺寸解析不完整时不存
+    };
+
     let avg_page_pixels = existing_book
         .filter(|cached| {
             cached.kind == IMAGE_FOLDER_KIND && cached.content_signature == content_signature
@@ -268,11 +312,19 @@ fn fill_image_book_payload_from_images(
     (
         count as i64,
         json,
+        meta_json,
         cover,
         content_signature,
         is_oversized,
         avg_page_pixels as i64,
     )
+}
+
+/// 图片页面元数据
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PageMeta {
+    pub w: u32,
+    pub h: u32,
 }
 
 fn analyze_image_folder(images: &[String]) -> u64 {
@@ -410,6 +462,7 @@ mod tests {
                 mtime: system_time_to_secs(metadata.modified().ok()),
                 page_count: 77,
                 pages_json: None,
+                pages_meta_json: Some("[{\"w\":612,\"h\":792}]".to_string()),
                 content_signature: None,
                 is_oversized: false,
                 avg_page_pixels: 0,
@@ -441,6 +494,7 @@ mod tests {
             mtime: system_time_to_secs(old_metadata.modified().ok()),
             page_count: 77,
             pages_json: None,
+            pages_meta_json: Some("[{\"w\":612,\"h\":792}]".to_string()),
             content_signature: None,
             is_oversized: false,
             avg_page_pixels: 0,
@@ -480,6 +534,7 @@ mod tests {
                 mtime: initial_book.mtime,
                 page_count: initial_book.page_count,
                 pages_json: initial_book.pages_json.clone(),
+                pages_meta_json: initial_book.pages_meta_json.clone(),
                 content_signature: initial_book.content_signature.clone(),
                 is_oversized: true,
                 avg_page_pixels: 123_456,
@@ -525,6 +580,7 @@ mod tests {
                 mtime: initial_book.mtime,
                 page_count: initial_book.page_count,
                 pages_json: initial_book.pages_json.clone(),
+                pages_meta_json: initial_book.pages_meta_json.clone(),
                 content_signature: initial_book.content_signature.clone(),
                 is_oversized: initial_book.is_oversized,
                 avg_page_pixels: initial_book.avg_page_pixels,

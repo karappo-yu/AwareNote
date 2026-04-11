@@ -1,0 +1,580 @@
+// ============================================
+// Art Gallery — Premium Theme
+// Inspired by Kavita / Plex / Apple Books
+// ============================================
+
+// --- Brand colors (Sass vars for compile-time) ---
+$brand: #e8a838
+$brand-light: #f0c56e
+$brand-dark: #c48820
+
+// CSS custom properties — defaults (overridden per theme)
+:root
+  --q-brand: #e8a838
+  --brand: #e8a838
+  --brand-text: #1a1a2e
+
+// ===================================
+// Dark theme — Deep charcoal + gold
+// ===================================
+.body--dark
+  --q-brand: #e8a838
+  --brand: #e8a838
+  --brand-text: #1a1a2e
+  --bg-base: #0f1117
+  --bg-surface: #1a1d27
+  --bg-surface-elevated: #222633
+  --bg-overlay: rgba(15, 17, 23, 0.85)
+  --text-primary: #f0f0f5
+  --text-secondary: #9498a8
+  --text-muted: #5d6177
+  --border-subtle: rgba(255, 255, 255, 0.06)
+  --border-light: rgba(255, 255, 255, 0.1)
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3)
+  --shadow-card-hover: 0 12px 40px rgba(0, 0, 0, 0.5)
+  --shadow-glow: 0 0 60px color-mix(in srgb, var(--brand) 8%, transparent)
+
+  background: var(--bg-base)
+
+  .q-layout
+    background: var(--bg-base)
+
+  .gallery-drawer
+    background: var(--bg-surface) !important
+    border-right: 1px solid var(--border-subtle) !important
+
+  .gallery-header
+    background: rgba(15, 17, 23, 0.8) !important
+    backdrop-filter: blur(20px) saturate(180%)
+    -webkit-backdrop-filter: blur(20px) saturate(180%)
+    border-bottom: 1px solid var(--border-subtle) !important
+
+  .surface-card
+    background: var(--bg-surface)
+    border: 1px solid var(--border-subtle)
+
+  .surface-card-elevated
+    background: var(--bg-surface-elevated)
+    border: 1px solid var(--border-light)
+
+  .reader-bar
+    background: var(--bg-base) !important
+
+// ===================================
+// Light theme — Clean white + blue
+// ===================================
+.body--light
+  --q-brand: #3b82f6
+  --brand: #3b82f6
+  --brand-text: #ffffff
+  --bg-base: #f8fafc
+  --bg-surface: #ffffff
+  --bg-surface-elevated: #ffffff
+  --bg-overlay: rgba(248, 250, 252, 0.85)
+  --text-primary: #0f172a
+  --text-secondary: #475569
+  --text-muted: #94a3b8
+  --border-subtle: rgba(0, 0, 0, 0.06)
+  --border-light: rgba(0, 0, 0, 0.1)
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06)
+  --shadow-card-hover: 0 8px 30px rgba(59, 130, 246, 0.1)
+  --shadow-glow: 0 0 40px rgba(59, 130, 246, 0.06)
+
+  background: var(--bg-base)
+
+  .q-layout
+    background: var(--bg-base)
+
+  .gallery-drawer
+    background: #f1f5f9 !important
+    border-right: 1px solid var(--border-subtle) !important
+
+  .gallery-header
+    background: rgba(248, 250, 252, 0.85) !important
+    backdrop-filter: blur(20px) saturate(180%)
+    -webkit-backdrop-filter: blur(20px) saturate(180%)
+    border-bottom: 1px solid var(--border-subtle) !important
+    color: #334155 !important
+    .q-btn
+      color: #475569 !important
+
+  .surface-card
+    background: var(--bg-surface)
+    border: 1px solid var(--border-subtle)
+
+  .surface-card-elevated
+    background: var(--bg-surface-elevated)
+    border: 1px solid var(--border-light)
+    box-shadow: var(--shadow-card)
+
+  .reader-bar
+    background: #f1f5f9 !important
+    color: #334155 !important
+    .q-btn
+      color: #475569 !important
+    .q-btn-toggle .q-btn
+      color: #64748b !important
+
+// ===================================
+// Scrollbar
+// ===================================
+::-webkit-scrollbar
+  width: 6px
+::-webkit-scrollbar-track
+  background: transparent
+::-webkit-scrollbar-thumb
+  background: rgba(128, 128, 128, 0.15)
+  border-radius: 3px
+::-webkit-scrollbar-thumb:hover
+  background: rgba(128, 128, 128, 0.3)
+
+// ===================================
+// Book card — Kavita/Plex inspired
+// ===================================
+.book-card
+  border-radius: 12px !important
+  overflow: hidden
+  transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.3s ease
+  box-shadow: var(--shadow-card)
+  position: relative
+
+  &:hover
+    transform: translateY(-8px) scale(1.02)
+    box-shadow: var(--shadow-card-hover)
+    z-index: 2
+
+  .q-img
+    border-radius: 0 !important
+
+  .book-card-info
+    padding: 10px 12px 12px
+    background: var(--bg-surface)
+
+  .book-card-title
+    font-size: 13px
+    font-weight: 600
+    line-height: 1.35
+    color: var(--text-primary)
+    display: -webkit-box
+    -webkit-line-clamp: 2
+    -webkit-box-orient: vertical
+    overflow: hidden
+
+  .book-card-meta
+    font-size: 11px
+    color: var(--text-muted)
+    margin-top: 4px
+
+// Cover gradient overlay for title
+.cover-gradient
+  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 40%, transparent 70%)
+
+// ===================================
+// Thumbnail card in detail page
+// ===================================
+.thumb-card
+  border-radius: 8px !important
+  overflow: hidden
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease
+  border: 2px solid transparent
+
+  &:hover
+    transform: scale(1.05)
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--brand) 15%, transparent)
+    border-color: var(--brand)
+
+// ===================================
+// Sidebar active indicator
+// ===================================
+.glow-active
+  background: color-mix(in srgb, var(--brand) 8%, transparent) !important
+  border-left: 3px solid var(--brand) !important
+  border-radius: 0 8px 8px 0 !important
+
+// ===================================
+// Hero section for detail page
+// ===================================
+.hero-section
+  position: relative
+  overflow: hidden
+  border-radius: 20px
+  padding: 40px
+  min-height: 320px
+
+  &::before
+    content: ''
+    position: absolute
+    inset: 0
+    background: var(--bg-surface-elevated)
+    z-index: 0
+
+  &::after
+    content: ''
+    position: absolute
+    inset: 0
+    z-index: 1
+    background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 8%, transparent) 0%, transparent 60%)
+
+// ===================================
+// Action button styles
+// ===================================
+.action-btn-primary
+  border-radius: 12px !important
+  font-weight: 600 !important
+  letter-spacing: 0.3px
+  text-transform: none !important
+  padding: 12px 28px !important
+
+.action-btn-outline
+  border-radius: 12px !important
+  font-weight: 500 !important
+  letter-spacing: 0.2px
+  text-transform: none !important
+  padding: 10px 20px !important
+
+// ===================================
+// Badge & Chip styles
+// ===================================
+.format-badge
+  font-size: 10px !important
+  padding: 3px 8px !important
+  border-radius: 5px !important
+  font-weight: 600 !important
+  letter-spacing: 0.5px
+
+.meta-chip
+  font-size: 12px !important
+  border-radius: 8px !important
+
+// ===================================
+// Section headers
+// ===================================
+.section-title
+  font-size: 18px
+  font-weight: 700
+  color: var(--text-primary)
+  letter-spacing: -0.3px
+
+.section-subtitle
+  font-size: 13px
+  color: var(--text-secondary)
+  margin-top: 2px
+
+// ===================================
+// Ambient background glow (Kavita ColorScape style)
+// ===================================
+.ambient-glow
+  position: absolute
+  width: 400px
+  height: 400px
+  border-radius: 50%
+  filter: blur(120px)
+  opacity: 0.15
+  pointer-events: none
+  z-index: 0
+
+// ===================================
+// Transitions
+// ===================================
+.fade-enter-active, .fade-leave-active
+  transition: opacity 0.25s ease
+.fade-enter-from, .fade-leave-to
+  opacity: 0
+
+.slide-up-enter-active, .slide-up-leave-active
+  transition: transform 0.3s ease, opacity 0.3s ease
+.slide-up-enter-from
+  transform: translateY(20px)
+  opacity: 0
+.slide-up-leave-to
+  transform: translateY(-20px)
+  opacity: 0
+
+// ===================================
+// Back to top button
+// ===================================
+.back-to-top-btn
+  opacity: 0
+  transform: translateY(20px) scale(0.8)
+  pointer-events: none
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4)
+
+  &.visible
+    opacity: 1
+    transform: translateY(0) scale(1)
+    pointer-events: auto
+
+  &:hover
+    transform: scale(1.1) !important
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5)
+
+// ===================================
+// Column count control
+// ===================================
+.col-count-btn
+  font-size: 12px
+  font-weight: 600
+  &[disable]
+    cursor: default
+  padding: 4px 8px
+
+.col-popup
+  background: var(--bg-surface)
+  border-radius: 12px
+  min-width: 180px
+  padding-top: 32px !important
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4)
+
+.col-slider
+  .q-slider__track-container
+    height: 4px
+    border-radius: 2px
+
+// ===================================
+// Masonry / Pinterest waterfall layout
+// ===================================
+.masonry-container
+  width: 100%
+
+.masonry-item
+  transition: box-shadow 0.2s ease
+
+.masonry-card
+  border-radius: 10px !important
+  overflow: hidden
+  border: 2px solid transparent
+  transition: border-color 0.2s ease, box-shadow 0.2s ease
+
+  &:hover
+    border-color: var(--brand)
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--brand) 12%, transparent)
+
+.masonry-img-wrapper
+  position: relative
+  overflow: hidden
+  border-radius: 8px
+  background: var(--bg-surface-elevated)
+
+.masonry-skeleton
+  position: absolute
+  inset: 0
+  border-radius: 8px
+
+.masonry-img-native
+  display: block
+  width: 100%
+  height: 100%
+  object-fit: cover
+  cursor: pointer
+  transition: opacity 0.3s ease
+  opacity: 0
+
+  &.img-loaded
+    opacity: 1
+
+// Masonry spread — two images side by side, no gap
+.masonry-spread-container
+  display: flex
+  width: 100%
+  height: 100%
+  gap: 0
+
+.masonry-spread-half
+  width: 50%
+  height: 100%
+  object-fit: contain
+  cursor: pointer
+  transition: opacity 0.3s ease
+  opacity: 0
+
+  &.img-loaded
+    opacity: 1
+
+.load-more-btn
+  border-radius: 20px !important
+  padding: 8px 28px !important
+  font-weight: 500 !important
+
+// ===================================
+// X/Twitter-style image viewer
+// ===================================
+.viewer-dialog
+  .q-dialog__inner
+    padding: 0 !important
+  .q-dialog__backdrop
+    background: rgba(0, 0, 0, 0.85) !important
+
+.viewer-container
+  background: rgba(15, 17, 23, 0.95)
+  width: 100vw
+  height: 100vh
+
+.viewer-topbar
+  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%)
+  position: relative
+  z-index: 10
+
+.viewer-close-btn
+  opacity: 0.6
+  &:hover
+    opacity: 1
+    background: rgba(255,255,255,0.1) !important
+
+.viewer-page-counter
+  color: white
+  font-size: 14px
+  font-weight: 500
+  letter-spacing: 0.3px
+  opacity: 0.7
+
+.viewer-tool-btn
+  opacity: 0.5
+  transition: opacity 0.15s ease, background 0.15s ease
+  &:hover
+    opacity: 1
+    background: rgba(255,255,255,0.12) !important
+  &.opacity-disabled
+    opacity: 0.2
+    pointer-events: none
+
+.viewer-bottombar
+  background: linear-gradient(0deg, rgba(0,0,0,0.5) 0%, transparent 100%)
+
+// Nav arrows — semi-transparent, adaptive to theme
+.viewer-nav-arrow
+  position: absolute
+  top: 50%
+  transform: translateY(-50%)
+  z-index: 5
+  display: flex
+  align-items: center
+  justify-content: center
+  width: 48px
+  height: 48px
+  border-radius: 50%
+  background: rgba(0, 0, 0, 0.35)
+  backdrop-filter: blur(4px)
+  -webkit-backdrop-filter: blur(4px)
+  border: none
+  cursor: pointer
+  color: white
+  transition: background 0.2s ease, opacity 0.25s ease, transform 0.25s ease, box-shadow 0.2s ease
+  svg
+    width: 28px
+    height: 28px
+  &:hover
+    background: rgba(0, 0, 0, 0.6)
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.15)
+    transform: translateY(-50%) scale(1.1)
+
+// 亮色模式：半透明深灰
+.body--light .viewer-nav-arrow
+  background: rgba(0, 0, 0, 0.25)
+  color: white
+  &:hover
+    background: rgba(0, 0, 0, 0.5)
+    box-shadow: 0 0 16px rgba(0, 0, 0, 0.2)
+
+.viewer-nav-left
+  left: 16px
+.viewer-nav-right
+  right: 16px
+
+// Auto-hide arrows when mouse is away
+.viewer-nav-arrow.arrow-hidden
+  opacity: 0
+  pointer-events: none
+  transform: translateY(-50%) scale(0.85)
+
+// Arrow fade transition
+.viewer-arrow-fade-enter-active,
+.viewer-arrow-fade-leave-active
+  transition: opacity 0.25s ease, transform 0.25s ease
+.viewer-arrow-fade-enter-from,
+.viewer-arrow-fade-leave-to
+  opacity: 0
+  transform: translateY(-50%) scale(0.85)
+
+// The image itself
+.viewer-image
+  max-width: calc(100vw - 140px)
+  max-height: calc(100vh - 120px)
+  object-fit: contain
+  user-select: none
+  -webkit-user-drag: none
+
+  @media (max-width: 768px)
+    max-width: calc(100vw - 80px)
+
+// Viewer spread container — two images side by side
+.viewer-spread-container
+  display: flex
+  max-width: calc(100vw - 140px)
+  max-height: calc(100vh - 120px)
+  user-select: none
+  -webkit-user-drag: none
+
+  @media (max-width: 768px)
+    max-width: calc(100vw - 80px)
+
+.viewer-spread-half
+  height: 100%
+  max-height: calc(100vh - 120px)
+  object-fit: contain
+  user-select: none
+  -webkit-user-drag: none
+
+// SVG (PDF pages) need white background
+.viewer-image-svg
+  background: white
+  border-radius: 4px
+
+.viewer-image-grab
+  cursor: grab
+
+.viewer-image-grabbing
+  cursor: grabbing
+
+// ===================================
+// Book info drawer (detail page)
+// ===================================
+.info-drawer
+  background: var(--bg-surface) !important
+
+.body--dark .info-drawer
+  background: #1a1d27 !important
+
+.body--light .info-drawer
+  background: #ffffff !important
+
+// ===================================
+// Auto-hide header (masonry mode)
+// ===================================
+.reader-bar
+  transition: transform 0.3s ease, opacity 0.3s ease
+
+  &.header-hidden
+    transform: translateY(-100%)
+    opacity: 0
+    pointer-events: none
+
+// Masonry mode: header floats above content, doesn't push it
+.masonry-header-float
+  position: fixed !important
+  z-index: 10
+
+// Brand text color — gold on dark needs dark text, blue on light needs white text
+.q-btn[color="brand"] .q-btn__content,
+.q-badge[color="brand"]
+  color: var(--brand-text) !important
+
+// Dynamic brand color overrides — use CSS vars instead of compile-time Sass values
+.text-brand
+  color: var(--q-brand) !important
+.bg-brand
+  background: var(--q-brand) !important
+
+// Brand toggle button active state — dynamic text color
+.q-btn-toggle .q-btn.bg-brand .q-btn__content
+  color: var(--brand-text) !important

@@ -3,3 +3,5 @@
 pub use super::book_files::Entity as BookFiles;
 pub use super::categories::Entity as Categories;
 pub use super::libraries::Entity as Libraries;
+pub use super::page_spreads::Entity as PageSpreads;
+pub use super::user_data::Entity as UserData;

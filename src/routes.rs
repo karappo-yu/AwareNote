@@ -7,6 +7,7 @@ pub mod categories;
 pub mod config;
 pub mod frontend;
 pub mod system;
+pub mod user_data;
 
 /// 创建并配置应用程序路由
 ///
@@ -21,11 +22,12 @@ pub mod system;
 /// 返回配置好的 Axum Router 实例
 pub fn create_router(state: crate::AppState, app_config: &crate::config::Config) -> axum::Router {
     axum::Router::new()
-        .merge(frontend::routes())
         .merge(system::routes(state.clone()))
         .merge(books::routes(state.clone()))
         .merge(categories::routes(state.clone()))
+        .merge(user_data::routes(state.clone()))
         .merge(config::routes(state))
+        .merge(frontend::routes())  // SPA fallback 放最后，确保 API 路由优先匹配
         .layer(crate::middleware::cors())
         .layer(tower::limit::ConcurrencyLimitLayer::new(
             app_config.internal.http_concurrency_limit.max(1),
