@@ -1,1 +1,0 @@
-import{Dt as e,N as t,Tt as n,yt as r}from"./api-CTpYru4R.js";function i(){let i=null,a=r();function o(){i!==null&&(clearTimeout(i),i=null)}return e(o),n(o),{removeTimeout:o,registerTimeout(e,n){o(),t(a)===!1&&(i=setTimeout(()=>{i=null,e()},n))}}}export{i as t};

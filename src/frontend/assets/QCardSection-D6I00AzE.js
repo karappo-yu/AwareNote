@@ -1,1 +1,0 @@
-import{V as e,Y as t,bt as n,dt as r}from"./api-CTpYru4R.js";var i=t({name:`QCardSection`,props:{tag:{type:String,default:`div`},horizontal:Boolean},setup(t,{slots:i}){let a=r(()=>`q-card__section q-card__section--${t.horizontal===!0?`horiz row no-wrap`:`vert`}`);return()=>n(t.tag,{class:a.value},e(i.default))}});export{i as t};

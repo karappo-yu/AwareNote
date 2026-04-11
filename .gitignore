@@ -11,3 +11,6 @@ art-gallery/.quasar/
 # macOS app build
 native-macos/build/
 native-macos/dist/
+
+# Compiled frontend (Vite build output)
+src/frontend/
