@@ -251,8 +251,8 @@ fn fill_image_book_payload_from_images(
     recognizer: &ConfigurableRecognizer,
     images: Vec<ImageEntry>,
     existing_book: Option<&CachedBookMetadata>,
-    mtime: i64,
-    size: i64,
+    _mtime: i64,
+    _size: i64,
 ) -> (
     i64,
     Option<String>,
