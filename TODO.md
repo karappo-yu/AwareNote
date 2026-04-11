@@ -124,6 +124,6 @@
 
 ## 技术债务
 
-- [ ] `src/frontend/` 构建产物从 git 跟踪中彻底移除（加 `.gitignore`）
-- [ ] Cargo 编译警告：`strategy.rs` 中 `mtime`/`size` 未使用变量
+- [x] `src/frontend/` 构建产物从 git 跟踪中彻底移除（加 `.gitignore`）
+- [x] Cargo 编译警告：`strategy.rs` 中 `mtime`/`size` 未使用变量
 - [ ] 统一前端状态初始化时机（settings.loaded watch 散落多处）
