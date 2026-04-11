@@ -125,11 +125,13 @@ cd awarenotes
 
 The built application will be at `native-macos/dist/AwareNote.app`.
 
+> ⚠️ **Unsigned App Warning**: Since this app is not code-signed, macOS may block it on first run. Run `xattr -cr /Applications/AwareNote.app` in terminal to unquarantine.
+
+> ⚠️ **Disclaimer**: This project was built with vibe coding. Code quality is not guaranteed — read at your own risk! Using AI assistants to navigate the codebase is highly recommended.
+
 #### Windows
 
 > **Note**: Windows compatibility is not guaranteed. The following steps are provided as-is for manual builds.
-
-> ⚠️ **Disclaimer**: This project was built with vibe coding. Code quality is not guaranteed — read at your own risk! Using AI assistants to navigate the codebase is highly recommended.
 
 **Backend (Rust)**:
 
@@ -268,25 +270,13 @@ cd awarenotes
 
 构建产物位于 `native-macos/dist/AwareNote.app`。
 
-#### Windows
-
-> **注意**：不保证 Windows 兼容性。以下步骤仅供手动构建参考。
+> ⚠️ **未签名提示**：由于应用未进行代码签名，下载后首次运行会被 macOS 拦截。请在终端执行 `xattr -cr /Applications/AwareNote.app` 解除限制。
 
 > ⚠️ **免责声明**：本项目全程采用 vibe coding 编写，质量不能保证，请自行判断使用风险！建议使用 AI 助手阅读理解代码。
 
----
+#### Windows
 
-### ⚠️ macOS 用户提示
-
-由于本应用**未进行代码签名**，下载后首次运行会被 macOS 拦截。请在终端执行以下命令解除限制：
-
-```bash
-xattr -cr /Applications/AwareNote.app
-```
-
-然后即可正常启动应用。
-
----
+> **注意**：不保证 Windows 兼容性。以下步骤仅供手动构建参考。
 
 **后端（Rust）**：
 
@@ -425,11 +415,13 @@ cd awarenotes
 
 ビルド成果物は `native-macos/dist/AwareNote.app` に配置されます。
 
+> ⚠️ **未署名警告**: このアプリはコード署名されていないため、macOS が初回起動時にブロックする可能性があります。ターミナルで `xattr -cr /Applications/AwareNote.app` を実行して解除してください。
+
+> ⚠️ **免責事項**: このプロジェクトは vibe coding で構築されました。コード品質は保証されません — 自己責任で使用してください！AI アシスタントでコードベースを理解することをお勧めします。
+
 #### Windows
 
 > **注意**: Windows 互換性は保証されません。以下の手順は手動ビルドの参考情報です。
-
-> ⚠️ **免責事項**: このプロジェクトは vibe coding で構築されました。コード品質は保証されません — 自己責任で使用してください！AI アシスタントでコードベースを理解することをお勧めします。
 
 **バックエンド (Rust)**:
 
