@@ -1441,7 +1441,9 @@ async function loadBook() {
           getPageFavorites(bookId.value),
           getBookSettings(bookId.value),
         ])
-        pageNames.value = pages
+        pageNames.value = [...pages].sort((a, b) =>
+          a.filename.localeCompare(b.filename, undefined, { numeric: true })
+        )
         spreads.value = spreadData
         pageFavorites.value = favData
         // 读取阅读方向
