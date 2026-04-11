@@ -114,7 +114,7 @@
 
             <!-- Grid view — paginated, uniform ratio -->
             <template v-if="thumbViewMode === 'grid'">
-              <div class="row q-col-gutter-sm">
+              <div class="row q-col-gutter-sm" :style="{ direction: isRtl ? 'rtl' : 'ltr' }">
                 <div
                   v-for="page in paginatedThumbs"
                   :key="page"
@@ -132,6 +132,24 @@
                     >
                       <template v-slot:loading>
                         <q-skeleton type="rect" style="height: 100%" />
+                      </template>
+                      <!-- Page favorite badge in grid view (not for virtual book) -->
+                      <template v-if="!isVirtualBook">
+                        <q-icon
+                          v-if="isGridPageFavorited(page)"
+                          name="favorite"
+                          color="pink-4"
+                          size="16px"
+                          class="page-fav-badge"
+                          @click.stop="toggleGridPageFavorite(page, $event)"
+                        />
+                        <q-icon
+                          v-else
+                          name="favorite_border"
+                          size="16px"
+                          class="page-fav-badge page-fav-badge-hover"
+                          @click.stop="toggleGridPageFavorite(page, $event)"
+                        />
                       </template>
                     </q-img>
                   </q-card>
@@ -173,16 +191,26 @@
                         class="masonry-skeleton"
                         animation="fade"
                       />
-                      <!-- Page favorite badge -->
-                      <q-icon
-                        v-if="isPageFavorited(item)"
-                        name="favorite"
-                        color="pink-4"
-                        size="16px"
-                        class="page-fav-badge"
-                      />
-                      <!-- Spread: two images side by side -->
-                      <div v-if="item.isSpread" class="masonry-spread-container">
+                      <!-- Page favorite badge (not for virtual book) -->
+                      <template v-if="!isVirtualBook">
+                        <q-icon
+                          v-if="isPageFavorited(item)"
+                          name="favorite"
+                          color="pink-4"
+                          size="16px"
+                          class="page-fav-badge"
+                          @click.stop="togglePageFavoriteFromMasonry(item, $event)"
+                        />
+                        <q-icon
+                          v-else
+                          name="favorite_border"
+                          size="16px"
+                          class="page-fav-badge page-fav-badge-hover"
+                          @click.stop="togglePageFavoriteFromMasonry(item, $event)"
+                        />
+                      </template>
+                      <!-- Spread: two images side by side (RTL: reversed visual order) -->
+                      <div v-if="item.isSpread" class="masonry-spread-container" :style="{ direction: item.direction === 'rtl' ? 'rtl' : 'ltr' }">
                         <img
                           :src="getPageUrl(item.pages![0])"
                           :alt="'第' + item.pages![0] + '页'"
@@ -212,10 +240,7 @@
                         @click="openViewer(item.page)"
                       />
                     </div>
-                    <!-- Virtual book: show source book title -->
-                    <div v-if="isVirtualBook" class="virtual-page-source">
-                      {{ getPageSourceTitle(item) }}
-                    </div>
+                    <!-- Virtual book: source book title (hidden per user request) -->
                   </q-card>
                 </div>
               </div>
@@ -250,6 +275,8 @@
       transition-hide="fade"
       class="viewer-dialog"
       @keydown.escape="closeViewer()"
+      @keydown.left="isRtl ? viewerNext() : viewerPrev()"
+      @keydown.right="isRtl ? viewerPrev() : viewerNext()"
     >
       <div
         class="viewer-container column no-wrap"
@@ -259,7 +286,7 @@
         <div class="viewer-topbar row items-center q-px-md" @click.stop>
           <q-btn flat round dense icon="close" color="white" size="sm" class="viewer-close-btn" @click="closeViewer()" />
           <q-space />
-          <span class="viewer-page-counter">{{ currentViewerSpread ? currentViewerSpread[0] + '-' + currentViewerSpread[1] : viewerPage }} / {{ book?.page_count }}</span>
+          <span class="viewer-page-counter">{{ currentViewerSpread ? currentViewerSpread.pages[0] + '-' + currentViewerSpread.pages[1] : viewerPage }} / {{ book?.page_count }}</span>
           <q-space />
           <q-btn flat round dense icon="add" color="white" size="sm" class="viewer-tool-btn" @click="viewerZoom(0.3)" />
           <q-btn flat round dense icon="remove" color="white" size="sm" class="viewer-tool-btn" :class="{ 'opacity-disabled': viewerState.zoom <= 0.5 }" @click="viewerZoom(-0.3)" />
@@ -275,29 +302,29 @@
           @click="closeViewer()"
           @wheel.prevent="handleWheel"
         >
-          <!-- Left arrow -->
+          <!-- Prev arrow: LTR=左侧←, RTL=右侧→ -->
           <transition name="viewer-arrow-fade">
             <q-btn
               v-if="viewerPage > 1"
-              class="viewer-nav-arrow viewer-nav-left"
-              :class="{ 'arrow-hidden': !arrowsVisible }"
+              class="viewer-nav-arrow"
+              :class="[isRtl ? 'viewer-nav-right' : 'viewer-nav-left', { 'arrow-hidden': !arrowsVisible }]"
               round
               flat
-              icon="chevron_left"
-              @click.stop="viewerPrev"
+              :icon="isRtl ? 'chevron_right' : 'chevron_left'"
+              @click.stop="viewerPrev()"
             />
           </transition>
 
-          <!-- Right arrow -->
+          <!-- Next arrow: LTR=右侧→, RTL=左侧← -->
           <transition name="viewer-arrow-fade">
             <q-btn
               v-if="book && viewerPage < book.page_count"
-              class="viewer-nav-arrow viewer-nav-right"
-              :class="{ 'arrow-hidden': !arrowsVisible }"
+              class="viewer-nav-arrow"
+              :class="[isRtl ? 'viewer-nav-left' : 'viewer-nav-right', { 'arrow-hidden': !arrowsVisible }]"
               round
               flat
-              icon="chevron_right"
-              @click.stop="viewerNext"
+              :icon="isRtl ? 'chevron_left' : 'chevron_right'"
+              @click.stop="viewerNext()"
             />
           </transition>
 
@@ -307,10 +334,18 @@
             style="min-height: 0"
             @click="closeViewer()"
           >
-            <!-- Spread: two images side by side -->
-            <div v-if="currentViewerSpread" class="viewer-spread-container" :style="viewerImgStyle">
+            <!-- Spread: two images side by side (RTL: reversed order) -->
+            <div v-if="currentViewerSpread" class="viewer-spread-container"
+              :class="{ 'viewer-image-grabbing': isDragging, 'viewer-image-grab': !isDragging }"
+              :style="{ ...viewerImgStyle, direction: currentViewerSpread.direction === 'rtl' ? 'rtl' : 'ltr' }"
+              @click.stop
+              @mousedown.stop="startDrag"
+              @mousemove.stop="onDrag"
+              @mouseup.stop="endDrag"
+              @mouseleave="endDrag"
+            >
               <img
-                :src="getPageUrl(currentViewerSpread[0], book?.optimization_strategy === 2)"
+                :src="getPageUrl(currentViewerSpread.pages[0], book?.optimization_strategy === 2)"
                 class="viewer-spread-half"
                 :class="{ 'viewer-image-svg': book && bookFormat(book.type) === 'pdf' }"
                 draggable="false"
@@ -322,7 +357,7 @@
                 @mouseleave="endDrag"
               />
               <img
-                :src="getPageUrl(currentViewerSpread[1], book?.optimization_strategy === 2)"
+                :src="getPageUrl(currentViewerSpread.pages[1], book?.optimization_strategy === 2)"
                 class="viewer-spread-half"
                 :class="{ 'viewer-image-svg': book && bookFormat(book.type) === 'pdf' }"
                 draggable="false"
@@ -458,6 +493,21 @@
           <span style="font-size: 11px; word-break: break-all">{{ book.path }}</span>
         </div>
 
+        <!-- Reading direction (non-virtual books only) -->
+        <div v-if="!isVirtualBook" class="row items-center justify-between q-mb-lg">
+          <span class="text-caption" style="opacity: 0.6">阅读方向</span>
+          <q-btn
+            flat no-caps dense
+            :icon="isRtl ? 'arrow_back' : 'arrow_forward'"
+            :label="isRtl ? 'RTL →' : 'LTR ←'"
+            color="brand"
+            class="reading-dir-btn"
+            @click="toggleReadingDirection"
+          >
+            <q-tooltip>{{ isRtl ? '右翻书（日式漫画）' : '左翻书（默认）' }}</q-tooltip>
+          </q-btn>
+        </div>
+
         <q-separator class="q-mb-lg" style="opacity: 0.2" />
 
         <!-- Action buttons -->
@@ -497,7 +547,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, reactive, nextTick } from 'vue'
 import { Dark, LocalStorage, useQuasar } from 'quasar'
-import { getBook, getBookPages, getSpreads, createSpread, deleteSpread, toggleFavorite, revealInFinder, coverUrl as coverUrlFn, pdfPageSvgUrl, imagePageByNameUrl, bookFormat, type BookDetail, type PageInfo, type SpreadInfo, getPageFavorites, createPageFavorite, deletePageFavorite, type PageFavoriteInfo, getAllPageFavorites, type FavoritePageItem } from '../api'
+import { getBook, getBookPages, getSpreads, createSpread, deleteSpread, toggleFavorite, revealInFinder, coverUrl as coverUrlFn, pdfPageSvgUrl, imagePageByNameUrl, bookFormat, type BookDetail, type PageInfo, type SpreadInfo, getPageFavorites, createPageFavorite, deletePageFavorite, type PageFavoriteInfo, getAllPageFavorites, type FavoritePageItem, getBookSettings, updateBookSettings } from '../api'
 import { useSettings } from '../stores/settings'
 
 const props = defineProps<{ id: string }>()
@@ -514,13 +564,15 @@ const loading = ref(true)
 const infoDrawer = ref(false)
 const headerHover = ref(false)
 const isVirtualBook = computed(() => bookId.value === '__page_favorites__')
+const readingDirection = ref<'ltr' | 'rtl'>('ltr')
+const isRtl = computed(() => readingDirection.value === 'rtl')
 let headerHideTimer: ReturnType<typeof setTimeout> | null = null
 
 // ============== 虚拟页面列表 ==============
 // 将 pages + spreads 合并为虚拟列表，spread 页合并为一个项
 type VirtualPage = 
   | { type: 'single'; page: number }
-  | { type: 'spread'; pages: [number, number] }
+  | { type: 'spread'; pages: [number, number]; direction: 'ltr' | 'rtl' }
 
 const virtualPageList = computed<VirtualPage[]>(() => {
   if (!book.value) return []
@@ -533,12 +585,12 @@ const virtualPageList = computed<VirtualPage[]>(() => {
 
   // 构建页码→spread 信息
   // spread.filename 是左页，spread.next_file 是右页
-  const pageToSpread = new Map<number, { leftPage: number; rightPage: number }>()
+  const pageToSpread = new Map<number, { leftPage: number; rightPage: number; direction: 'ltr' | 'rtl' }>()
   for (const s of spreads.value) {
     const leftPage = filenameToPage.get(s.filename)
     const rightPage = filenameToPage.get(s.next_file)
     if (leftPage && rightPage) {
-      pageToSpread.set(leftPage, { leftPage, rightPage })
+      pageToSpread.set(leftPage, { leftPage, rightPage, direction: (s.direction as 'ltr' | 'rtl') || 'ltr' })
     }
   }
 
@@ -549,7 +601,7 @@ const virtualPageList = computed<VirtualPage[]>(() => {
     if (consumed.has(p)) continue
     const spread = pageToSpread.get(p)
     if (spread) {
-      result.push({ type: 'spread', pages: [spread.leftPage, spread.rightPage] })
+      result.push({ type: 'spread', pages: [spread.leftPage, spread.rightPage], direction: spread.direction })
       consumed.add(spread.leftPage)
       consumed.add(spread.rightPage)
     } else {
@@ -573,12 +625,67 @@ function isPageFavorited(item: { isSpread: boolean; page?: number; pages?: [numb
   return pageFavorites.value.some(f => f.filename === item.filename)
 }
 
-// 虚拟书：获取收藏页的来源书名
-function getPageSourceTitle(item: { isSpread: boolean; page?: number; pages?: [number, number] | null }) {
-  const page = item.isSpread ? item.pages![0] : item.page!
-  const source = favoritePageSources.value[page - 1]
-  return source?.book_title || ''
+// 网格视图：检查单页是否已收藏
+function isGridPageFavorited(page: number) {
+  const filename = pageNames.value[page - 1]?.filename
+  if (!filename) return false
+  return pageFavorites.value.some(f => f.filename === filename)
 }
+
+// 瀑布流：hover 心形点击收藏/取消
+async function togglePageFavoriteFromMasonry(
+  item: { isSpread: boolean; page?: number; pages?: [number, number] | null; filename: string },
+  event?: Event
+) {
+  event?.stopPropagation()
+  if (!book.value) return
+
+  const favorited = isPageFavorited(item)
+
+  if (item.isSpread && item.pages) {
+    const leftFilename = pageNames.value[item.pages[0] - 1]?.filename
+    const rightFilename = pageNames.value[item.pages[1] - 1]?.filename
+    if (!leftFilename || !rightFilename) return
+    if (favorited) {
+      await deletePageFavorite(bookId.value, leftFilename)
+      await deletePageFavorite(bookId.value, rightFilename)
+      $q.notify({ type: 'info', message: '已取消收藏' })
+    } else {
+      await createPageFavorite(bookId.value, leftFilename)
+      await createPageFavorite(bookId.value, rightFilename)
+      $q.notify({ type: 'positive', message: '已收藏拼接页' })
+    }
+  } else {
+    const filename = pageNames.value[(item.page || 1) - 1]?.filename
+    if (!filename) return
+    if (favorited) {
+      await deletePageFavorite(bookId.value, filename)
+      $q.notify({ type: 'info', message: '已取消收藏' })
+    } else {
+      await createPageFavorite(bookId.value, filename)
+      $q.notify({ type: 'positive', message: '已收藏' })
+    }
+  }
+  pageFavorites.value = await getPageFavorites(bookId.value)
+}
+
+// 网格视图：hover 心形点击收藏/取消
+async function toggleGridPageFavorite(page: number, event?: Event) {
+  event?.stopPropagation()
+  if (!book.value) return
+  const filename = pageNames.value[page - 1]?.filename
+  if (!filename) return
+  if (isGridPageFavorited(page)) {
+    await deletePageFavorite(bookId.value, filename)
+    $q.notify({ type: 'info', message: '已取消收藏' })
+  } else {
+    await createPageFavorite(bookId.value, filename)
+    $q.notify({ type: 'positive', message: '已收藏' })
+  }
+  pageFavorites.value = await getPageFavorites(bookId.value)
+}
+
+// 虚拟书：获取收藏页的来源书名
 
 // 返回顶部
 const showBackToTop = ref(false)
@@ -765,10 +872,14 @@ const masonryLayoutItems = computed(() => {
       }
     }
 
+    // RTL: 镜像水平位置
+    const finalLeft = isRtl.value ? 100 - left - itemWidthPct : left
+
     return {
       page: isSpread ? spreadPages![0] : page,
       pages: isSpread ? spreadPages : null,
       isSpread,
+      direction: isSpread ? (item as { type: 'spread'; pages: [number, number]; direction: 'ltr' | 'rtl' }).direction : 'ltr',
       filename: isSpread
         ? (pageNames.value[spreadPages![0] - 1]?.filename ?? '')
         : (pageNames.value[page - 1]?.filename ?? ''),
@@ -777,7 +888,7 @@ const masonryLayoutItems = computed(() => {
         : masonryLoadedSet.value.has(page),
       style: {
         position: 'absolute' as const,
-        left: `${left}%`,
+        left: `${finalLeft}%`,
         top: `${top}px`,
         width: `${itemWidthPct}%`,
       },
@@ -793,7 +904,6 @@ const masonryContainerStyle = computed(() => {
   const isPdf = book.value && bookFormat(book.value.type) === 'pdf'
   const DEFAULT_ASPECT = isPdf ? 0.7071 : 1
   const containerWidth = masonryContainerRef.value?.clientWidth || 900
-  const virtualSourceHeight = isVirtualBook.value ? 28 : 0
   const maxTop = Math.max(...items.map(item => {
     const top = parseFloat(item.style.top)
     const itemWidthPct = parseFloat(item.style.width)
@@ -808,7 +918,7 @@ const masonryContainerStyle = computed(() => {
       }
     }
     const itemHeight = itemWidthPx / aspectRatio
-    return top + itemHeight + virtualSourceHeight
+    return top + itemHeight
   }))
   return {
     position: 'relative' as const,
@@ -863,7 +973,7 @@ const viewerState = reactive({ zoom: 1, rotation: 0, flipH: false })
 const imgLoaded = ref(true) // template ref
 
 // 当前查看器页面是否是 spread 的一部分
-const currentViewerSpread = computed<[number, number] | null>(() => {
+const currentViewerSpread = computed<{ pages: [number, number]; direction: 'ltr' | 'rtl' } | null>(() => {
   const p = viewerPage.value
   const filename = pageNames.value[p - 1]?.filename
   if (!filename) return null
@@ -871,13 +981,13 @@ const currentViewerSpread = computed<[number, number] | null>(() => {
   const asLeft = spreads.value.find(s => s.filename === filename)
   if (asLeft) {
     const rightPage = pageNames.value.findIndex(info => info.filename === asLeft.next_file)
-    if (rightPage !== -1) return [p, rightPage + 1]
+    if (rightPage !== -1) return { pages: [p, rightPage + 1], direction: (asLeft.direction as 'ltr' | 'rtl') || 'ltr' }
   }
   // 检查当前页是否是某 spread 的右页
   const asRight = spreads.value.find(s => s.next_file === filename)
   if (asRight) {
     const leftPage = pageNames.value.findIndex(info => info.filename === asRight.filename)
-    if (leftPage !== -1) return [leftPage + 1, p]
+    if (leftPage !== -1) return { pages: [leftPage + 1, p], direction: (asRight.direction as 'ltr' | 'rtl') || 'ltr' }
   }
   return null
 })
@@ -891,8 +1001,8 @@ const isCurrentPageFavorited = computed(() => {
   if (!filename) return false
   // spread 时，左右两页都收藏了才算已收藏
   if (currentViewerSpread.value) {
-    const leftFilename = pageNames.value[currentViewerSpread.value[0] - 1]?.filename
-    const rightFilename = pageNames.value[currentViewerSpread.value[1] - 1]?.filename
+    const leftFilename = pageNames.value[currentViewerSpread.value.pages[0] - 1]?.filename
+    const rightFilename = pageNames.value[currentViewerSpread.value.pages[1] - 1]?.filename
     if (!leftFilename || !rightFilename) return false
     return pageFavorites.value.some(f => f.filename === leftFilename) &&
            pageFavorites.value.some(f => f.filename === rightFilename)
@@ -909,10 +1019,10 @@ async function togglePageFavorite() {
   if (isVirtualBook.value) {
     if (currentViewerSpread.value) {
       const leftInfo = favoritePageSources.value.find(s =>
-        pageNames.value[currentViewerSpread.value![0] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
+        pageNames.value[currentViewerSpread.value!.pages[0] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
       )
       const rightInfo = favoritePageSources.value.find(s =>
-        pageNames.value[currentViewerSpread.value![1] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
+        pageNames.value[currentViewerSpread.value!.pages[1] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
       )
       if (leftInfo) await deletePageFavorite(leftInfo.book_id, leftInfo.filename)
       if (rightInfo) await deletePageFavorite(rightInfo.book_id, rightInfo.filename)
@@ -932,8 +1042,8 @@ async function togglePageFavorite() {
 
   // 普通书籍
   if (currentViewerSpread.value) {
-    const leftFilename = pageNames.value[currentViewerSpread.value[0] - 1]?.filename
-    const rightFilename = pageNames.value[currentViewerSpread.value[1] - 1]?.filename
+    const leftFilename = pageNames.value[currentViewerSpread.value.pages[0] - 1]?.filename
+    const rightFilename = pageNames.value[currentViewerSpread.value.pages[1] - 1]?.filename
     if (!leftFilename || !rightFilename) return
     if (isCurrentPageFavorited.value) {
       await deletePageFavorite(bookId.value, leftFilename)
@@ -979,7 +1089,7 @@ async function handleCreateSpreadNext() {
   const nextFilename = pageNames.value[p]?.filename
   if (!filename || !nextFilename) return
   try {
-    await createSpread(bookId.value, filename, nextFilename)
+    await createSpread(bookId.value, filename, nextFilename, readingDirection.value)
     // 重新加载 spreads
     spreads.value = await getSpreads(bookId.value)
     $q.notify({ type: 'positive', message: '已拼接' })
@@ -989,7 +1099,7 @@ async function handleCreateSpreadNext() {
 async function handleDeleteSpread() {
   const spreadInfo = currentViewerSpread.value
   if (!spreadInfo) return
-  const filename = pageNames.value[spreadInfo[0] - 1]?.filename
+  const filename = pageNames.value[spreadInfo.pages[0] - 1]?.filename
   if (!filename) return
   try {
     await deleteSpread(bookId.value, filename)
@@ -1004,17 +1114,12 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 
 function onViewerMouseMove(e: MouseEvent) {
   if (!viewerOpen.value) return
-  // 鼠标靠近左右两侧 120px 范围内时显示箭头
   const nearEdge = e.clientX < 120 || e.clientX > window.innerWidth - 120
   if (nearEdge) {
-    arrowsVisible.value = true
-    if (hideTimer) clearTimeout(hideTimer)
-    hideTimer = setTimeout(() => {
-      arrowsVisible.value = false
-    }, 3000)
+    resetArrowTimer()
   } else if (arrowsVisible.value) {
-    // 鼠标离开边缘区域时立即隐藏
     arrowsVisible.value = false
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
   }
 }
 
@@ -1096,7 +1201,16 @@ function viewerReset() { viewerState.zoom = 1; viewerState.rotation = 0; viewerS
 function viewerRotate() { viewerState.rotation += 90 }
 function viewerFlip() { viewerState.flipH = !viewerState.flipH }
 
+function resetArrowTimer() {
+  arrowsVisible.value = true
+  if (hideTimer) clearTimeout(hideTimer)
+  hideTimer = setTimeout(() => {
+    arrowsVisible.value = false
+  }, 3000)
+}
+
 function viewerPrev() {
+  resetArrowTimer()
   if (viewerPage.value <= 1) return
   // 先退一页
   let targetPage = viewerPage.value - 1
@@ -1115,6 +1229,7 @@ function viewerPrev() {
 }
 
 function viewerNext() {
+  resetArrowTimer()
   if (!book.value || viewerPage.value >= book.value.page_count) return
   // 如果当前页是 spread 的左页，跳过右页
   const currentFilename = pageNames.value[viewerPage.value - 1]?.filename
@@ -1217,6 +1332,17 @@ function cycleTheme() {
   applyTheme(next)
 }
 
+// 切换阅读方向
+async function toggleReadingDirection() {
+  const next = readingDirection.value === 'ltr' ? 'rtl' : 'ltr'
+  readingDirection.value = next
+  try {
+    await updateBookSettings(bookId.value, [{ key: 'reading_direction', value: next }])
+  } catch {
+    console.warn('Failed to persist reading_direction')
+  }
+}
+
 async function handleFavorite() {
   if (!book.value || isVirtualBook.value) return
   try {
@@ -1239,6 +1365,7 @@ async function loadBook() {
   pageNames.value = []
   spreads.value = []
   pageFavorites.value = []
+  readingDirection.value = 'ltr'
   try {
     // 虚拟书：收藏的页面
     if (isVirtualBook.value) {
@@ -1270,6 +1397,7 @@ async function loadBook() {
           book_id: '__page_favorites__',
           filename: `fav://${p.book_id}/${p.filename}`,
           next_file: `fav://${p.book_id}/${p.next_file}`,
+          direction: p.direction || 'ltr',
           created_at: 0,
         }))
       // 存储来源信息供详情页和查看器使用
@@ -1282,14 +1410,18 @@ async function loadBook() {
     // 所有类型都加载页面列表和尺寸信息（用于瀑布流布局）
     if (book.value) {
       try {
-        const [pages, spreadData, favData] = await Promise.all([
+        const [pages, spreadData, favData, bookSettings] = await Promise.all([
           getBookPages(bookId.value),
           getSpreads(bookId.value),
           getPageFavorites(bookId.value),
+          getBookSettings(bookId.value),
         ])
         pageNames.value = pages
         spreads.value = spreadData
         pageFavorites.value = favData
+        // 读取阅读方向
+        const dirSetting = bookSettings.find(s => s.key === 'reading_direction')
+        readingDirection.value = dirSetting?.value === 'rtl' ? 'rtl' : 'ltr'
       } catch {
         // 加载失败时回退到序号请求
         console.warn('Failed to load page info, falling back to index-based URLs')

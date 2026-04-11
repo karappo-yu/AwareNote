@@ -209,6 +209,7 @@ impl DatabaseService {
     }
 
     async fn ensure_schema_columns(db: &DatabaseConnection) -> Result<(), DbErr> {
+        // book_files columns
         let rows = db
             .query_all(Statement::from_string(
                 db.get_database_backend(),
@@ -243,6 +244,25 @@ impl DatabaseService {
             if !columns.contains(column) {
                 db.execute_unprepared(sql).await?;
             }
+        }
+
+        // page_spreads columns
+        let spread_rows = db
+            .query_all(Statement::from_string(
+                db.get_database_backend(),
+                "PRAGMA table_info(page_spreads)",
+            ))
+            .await?;
+        let spread_columns: std::collections::HashSet<String> = spread_rows
+            .iter()
+            .filter_map(|row| row.try_get::<String>("", "name").ok())
+            .collect();
+
+        if !spread_columns.contains("direction") {
+            db.execute_unprepared(
+                "ALTER TABLE page_spreads ADD COLUMN direction TEXT NOT NULL DEFAULT 'ltr'",
+            )
+            .await?;
         }
 
         Ok(())
@@ -864,6 +884,7 @@ impl DatabaseService {
         book_id: &str,
         filename: &str,
         next_file: &str,
+        direction: &str,
     ) -> Result<page_spreads::Model, DbErr> {
         let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
             Ok(duration) => duration.as_secs() as i64,
@@ -876,6 +897,7 @@ impl DatabaseService {
             book_id: sea_orm::Set(book_id.to_string()),
             filename: sea_orm::Set(filename.to_string()),
             next_file: sea_orm::Set(next_file.to_string()),
+            direction: sea_orm::Set(direction.to_string()),
             created_at: sea_orm::Set(now),
         };
         active_model.insert(&self.db).await

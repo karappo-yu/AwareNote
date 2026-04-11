@@ -214,6 +214,7 @@ export interface SpreadInfo {
   book_id: string
   filename: string
   next_file: string
+  direction: string
   created_at: number
 }
 
@@ -221,8 +222,8 @@ export const getSpreads = (id: string) =>
   api.get(`/books/${id}/spreads`)
     .then(r => r.data.spreads as SpreadInfo[])
 
-export const createSpread = (id: string, filename: string, next_file: string) =>
-  api.post(`/books/${id}/spreads`, { filename, next_file })
+export const createSpread = (id: string, filename: string, next_file: string, direction = 'ltr') =>
+  api.post(`/books/${id}/spreads`, { filename, next_file, direction })
     .then(r => r.data as { success: boolean; spread: SpreadInfo })
 
 export const deleteSpread = (id: string, filename: string) =>
@@ -243,7 +244,8 @@ export interface FavoritePageItem {
   filename: string
   w: number | null
   h: number | null
-  next_file: string | null  // spread 右页 filename，null 表示非 spread
+  next_file: string | null
+  direction: string | null
 }
 
 export const getPageFavorites = (id: string) =>

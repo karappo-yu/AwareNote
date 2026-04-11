@@ -447,6 +447,7 @@ pub struct SpreadResponse {
     pub book_id: String,
     pub filename: String,
     pub next_file: String,
+    pub direction: String,
     pub created_at: i64,
 }
 
@@ -456,6 +457,7 @@ impl From<page_spreads::Model> for SpreadResponse {
             book_id: m.book_id,
             filename: m.filename,
             next_file: m.next_file,
+            direction: m.direction,
             created_at: m.created_at,
         }
     }
@@ -482,6 +484,7 @@ pub async fn list_spreads(
 pub struct CreateSpreadRequest {
     pub filename: String,
     pub next_file: String,
+    pub direction: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -505,7 +508,7 @@ pub async fn create_spread(
         .ok_or_else(|| AppError::NotFound(format!("book {book_id}")))?;
     let spread = state
         .db_service
-        .create_spread(&book_id_str, &body.filename, &body.next_file)
+        .create_spread(&book_id_str, &body.filename, &body.next_file, body.direction.as_deref().unwrap_or("ltr"))
         .await?;
     Ok(Json(CreateSpreadResponse {
         success: true,
@@ -639,6 +642,7 @@ pub struct FavoritePageItem {
     pub w: Option<u32>,
     pub h: Option<u32>,
     pub next_file: Option<String>, // spread 右页 filename，None 表示非 spread
+    pub direction: Option<String>, // spread 的阅读方向 ltr/rtl
 }
 
 /// GET /api/page-favorites — 获取所有收藏页面（虚拟书籍）
@@ -693,15 +697,16 @@ pub async fn list_all_page_favorites(
             };
 
             // 查找该页是否是 spread 的左页
-            let next_file = book_spreads
+            let spread_info = book_spreads
                 .get(&fav.book_id)
                 .and_then(|spreads| {
                     let found = spreads.iter()
-                        .find(|s| s.filename == fav.filename)
-                        .map(|s| s.next_file.clone());
-                    tracing::info!("[page-favorites] Looking for spread: book={} filename={} found={:?} ({} spreads available)", fav.book_id, fav.filename, found, spreads.len());
+                        .find(|s| s.filename == fav.filename);
+                    tracing::info!("[page-favorites] Looking for spread: book={} filename={} found={} ({} spreads available)", fav.book_id, fav.filename, found.is_some(), spreads.len());
                     found
                 });
+            let next_file = spread_info.map(|s| s.next_file.clone());
+            let direction = spread_info.map(|s| s.direction.clone());
 
             pages.push(FavoritePageItem {
                 book_id: fav.book_id.clone(),
@@ -711,6 +716,7 @@ pub async fn list_all_page_favorites(
                 w,
                 h,
                 next_file,
+                direction,
             });
         }
     }

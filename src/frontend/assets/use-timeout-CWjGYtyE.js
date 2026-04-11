@@ -1,1 +1,0 @@
-import{Ct as e,Tt as t,_t as n,j as r}from"./api-GhyJ9FBe.js";function i(){let i=null,a=n();function o(){i!==null&&(clearTimeout(i),i=null)}return t(o),e(o),{removeTimeout:o,registerTimeout(e,t){o(),r(a)===!1&&(i=setTimeout(()=>{i=null,e()},t))}}}export{i as t};

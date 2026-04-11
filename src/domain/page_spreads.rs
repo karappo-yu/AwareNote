@@ -23,6 +23,7 @@ pub struct Model {
     pub book_id: String,
     pub filename: String,
     pub next_file: String,
+    pub direction: String,
     pub created_at: i64,
 }
 
@@ -31,6 +32,7 @@ pub enum Column {
     BookId,
     Filename,
     NextFile,
+    Direction,
     CreatedAt,
 }
 
@@ -54,6 +56,7 @@ impl ColumnTrait for Column {
             Self::BookId => ColumnType::Text.def(),
             Self::Filename => ColumnType::Text.def(),
             Self::NextFile => ColumnType::Text.def(),
+            Self::Direction => ColumnType::Text.def(),
             Self::CreatedAt => ColumnType::Integer.def(),
         }
     }

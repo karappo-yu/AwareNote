@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS page_spreads (
     book_id TEXT NOT NULL,
     filename TEXT NOT NULL,
     next_file TEXT NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'ltr',
     created_at INTEGER NOT NULL,
     PRIMARY KEY (book_id, filename)
 );
