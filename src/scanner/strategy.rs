@@ -226,7 +226,7 @@ fn fill_image_book_model(
         .unwrap_or(0);
     let size = metadata.len() as i64;
     let (page_count, pages_json, pages_meta_json, cover_path, content_signature, is_oversized, avg_page_pixels) =
-        fill_image_book_payload_from_images(recognizer, images, existing_book, mtime, size);
+        fill_image_book_payload_from_images(recognizer, images, existing_book);
 
     ScannedBookFile {
         path: path.to_string_lossy().to_string(),
@@ -251,8 +251,6 @@ fn fill_image_book_payload_from_images(
     recognizer: &ConfigurableRecognizer,
     images: Vec<ImageEntry>,
     existing_book: Option<&CachedBookMetadata>,
-    _mtime: i64,
-    _size: i64,
 ) -> (
     i64,
     Option<String>,
