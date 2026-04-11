@@ -48,6 +48,19 @@ pub fn routes(state: AppState) -> Router {
             delete(crate::handlers::books::delete_spread),
         )
         .route(
+            "/api/books/:id/page-favorites",
+            get(crate::handlers::books::list_page_favorites)
+                .post(crate::handlers::books::create_page_favorite),
+        )
+        .route(
+            "/api/books/:id/page-favorites/:filename",
+            delete(crate::handlers::books::delete_page_favorite),
+        )
+        .route(
+            "/api/page-favorites",
+            get(crate::handlers::books::list_all_page_favorites),
+        )
+        .route(
             "/api/books/:id/page/:filename",
             get(crate::handlers::books::image_book_page_by_name),
         )

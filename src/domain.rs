@@ -7,6 +7,7 @@ pub mod prelude;
 pub mod book_files;
 pub mod categories;
 pub mod libraries;
+pub mod page_favorites;
 pub mod page_spreads;
 pub mod user_data;
 

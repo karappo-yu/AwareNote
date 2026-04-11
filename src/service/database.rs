@@ -7,7 +7,7 @@
 //! ローカルファイルとデータベースの同期を含む、データベース操作サービスを提供します。
 
 use crate::config::{CacheConfig, ScannerConfig};
-use crate::domain::{book_files, categories, libraries, page_spreads, user_data};
+use crate::domain::{book_files, categories, libraries, page_favorites, page_spreads, user_data};
 use crate::scanner::{CachedBookMetadata, ConfigurableRecognizer, ScanResult, Scanner};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectOptions, ConnectionTrait, DatabaseConnection, DbErr,
@@ -113,6 +113,7 @@ pub struct DatabaseService {
 impl DatabaseService {
     pub async fn new(config: &crate::config::Config) -> Result<Self, DbErr> {
         let persistent_path = normalize_sqlite_path(&config.database_url);
+        tracing::info!("[DB] Connecting to database at: {}", persistent_path);
         ensure_database_file(&persistent_path)?;
 
         let file_url = format!("sqlite:{}", persistent_path);
@@ -840,6 +841,11 @@ impl DatabaseService {
         if orphan_count > 0 {
             tracing::info!("cleaned up {orphan_count} orphan spread records");
         }
+        // 清理已删除书籍的孤儿 page_favorites 记录
+        let orphan_fav_count = self.cleanup_orphan_page_favorites(&existing_book_ids).await?;
+        if orphan_fav_count > 0 {
+            tracing::info!("cleaned up {orphan_fav_count} orphan page favorite records");
+        }
 
         Ok(report)
     }
@@ -899,6 +905,102 @@ impl DatabaseService {
         for spread in &all_spreads {
             if !book_id_set.contains(spread.book_id.as_str()) {
                 page_spreads::Entity::delete_by_id((spread.book_id.clone(), spread.filename.clone()))
+                    .exec(&self.db)
+                    .await?;
+                deleted += 1;
+            }
+        }
+        Ok(deleted)
+    }
+
+    // ============== Page Favorites ==============
+
+    /// 获取某本书的所有收藏页面
+    pub async fn get_page_favorites(&self, book_id: &str) -> Result<Vec<page_favorites::Model>, DbErr> {
+        page_favorites::Entity::find()
+            .filter(page_favorites::Column::BookId.eq(book_id))
+            .order_by_desc(page_favorites::Column::CreatedAt)
+            .all(&self.db)
+            .await
+    }
+
+    /// 获取所有收藏页面（跨书，按收藏时间倒序）
+    pub async fn get_all_page_favorites(&self) -> Result<Vec<page_favorites::Model>, DbErr> {
+        // Debug: raw SQL count
+        let count_result = self.db.query_one(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "SELECT COUNT(*) as cnt FROM page_favorites",
+        )).await?;
+        if let Some(row) = count_result {
+            let cnt: i64 = row.try_get("", "cnt").unwrap_or(-1);
+            tracing::info!("[DB] Raw SQL COUNT page_favorites = {}", cnt);
+        }
+
+        let result = page_favorites::Entity::find()
+            .order_by_desc(page_favorites::Column::CreatedAt)
+            .all(&self.db)
+            .await?;
+        tracing::info!("[DB] get_all_page_favorites returned {} records", result.len());
+        Ok(result)
+    }
+
+    /// 收藏页面
+    pub async fn create_page_favorite(
+        &self,
+        book_id: &str,
+        filename: &str,
+    ) -> Result<page_favorites::Model, DbErr> {
+        let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs() as i64,
+            Err(err) => {
+                tracing::warn!("system clock is before UNIX_EPOCH: {}", err);
+                0
+            }
+        };
+        let active_model = page_favorites::ActiveModel {
+            book_id: sea_orm::Set(book_id.to_string()),
+            filename: sea_orm::Set(filename.to_string()),
+            created_at: sea_orm::Set(now),
+        };
+        active_model.insert(&self.db).await
+    }
+
+    /// 取消收藏页面
+    pub async fn delete_page_favorite(
+        &self,
+        book_id: &str,
+        filename: &str,
+    ) -> Result<bool, DbErr> {
+        let result = page_favorites::Entity::delete_by_id((book_id.to_string(), filename.to_string()))
+            .exec(&self.db)
+            .await?;
+        Ok(result.rows_affected > 0)
+    }
+
+    /// 检查某页是否已收藏
+    pub async fn is_page_favorited(
+        &self,
+        book_id: &str,
+        filename: &str,
+    ) -> Result<bool, DbErr> {
+        let result = page_favorites::Entity::find_by_id((book_id.to_string(), filename.to_string()))
+            .one(&self.db)
+            .await?;
+        Ok(result.is_some())
+    }
+
+    /// 清理已删除书籍的孤儿 page_favorites 记录
+    pub async fn cleanup_orphan_page_favorites(&self, existing_book_ids: &[String]) -> Result<usize, DbErr> {
+        if existing_book_ids.is_empty() {
+            return Ok(0);
+        }
+        let all_favs = page_favorites::Entity::find().all(&self.db).await?;
+        let book_id_set: std::collections::HashSet<&str> =
+            existing_book_ids.iter().map(|s| s.as_str()).collect();
+        let mut deleted = 0;
+        for fav in &all_favs {
+            if !book_id_set.contains(fav.book_id.as_str()) {
+                page_favorites::Entity::delete_by_id((fav.book_id.clone(), fav.filename.clone()))
                     .exec(&self.db)
                     .await?;
                 deleted += 1;

@@ -14,6 +14,7 @@ use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
 use crate::domain::book_files;
+use crate::domain::page_favorites;
 use crate::domain::page_spreads;
 use crate::service::assets::PdfPageSvgAsset;
 use crate::{AppError, AppState};
@@ -530,6 +531,190 @@ pub async fn delete_spread(
         )));
     }
     Ok(Json(DeleteSpreadResponse { success: true }))
+}
+
+// ============== Page Favorites API ==============
+
+#[derive(Serialize)]
+pub struct PageFavoriteResponse {
+    pub book_id: String,
+    pub filename: String,
+    pub created_at: i64,
+}
+
+impl From<page_favorites::Model> for PageFavoriteResponse {
+    fn from(m: page_favorites::Model) -> Self {
+        PageFavoriteResponse {
+            book_id: m.book_id,
+            filename: m.filename,
+            created_at: m.created_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct PageFavoriteListResponse {
+    pub favorites: Vec<PageFavoriteResponse>,
+}
+
+/// GET /api/books/:id/page-favorites
+pub async fn list_page_favorites(
+    State(state): State<AppState>,
+    Path(book_id): Path<i64>,
+) -> Result<Json<PageFavoriteListResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    let favorites = state.db_service.get_page_favorites(&book_id_str).await?;
+    Ok(Json(PageFavoriteListResponse {
+        favorites: favorites.into_iter().map(PageFavoriteResponse::from).collect(),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct CreatePageFavoriteRequest {
+    pub filename: String,
+}
+
+#[derive(Serialize)]
+pub struct CreatePageFavoriteResponse {
+    pub success: bool,
+    pub favorite: PageFavoriteResponse,
+}
+
+/// POST /api/books/:id/page-favorites
+pub async fn create_page_favorite(
+    State(state): State<AppState>,
+    Path(book_id): Path<i64>,
+    Json(body): Json<CreatePageFavoriteRequest>,
+) -> Result<Json<CreatePageFavoriteResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    let _book = state
+        .db_service
+        .get_book(book_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("book {book_id}")))?;
+    let fav = state
+        .db_service
+        .create_page_favorite(&book_id_str, &body.filename)
+        .await?;
+    Ok(Json(CreatePageFavoriteResponse {
+        success: true,
+        favorite: PageFavoriteResponse::from(fav),
+    }))
+}
+
+#[derive(Serialize)]
+pub struct DeletePageFavoriteResponse {
+    pub success: bool,
+}
+
+/// DELETE /api/books/:id/page-favorites/:filename
+pub async fn delete_page_favorite(
+    State(state): State<AppState>,
+    Path((book_id, filename)): Path<(i64, String)>,
+) -> Result<Json<DeletePageFavoriteResponse>, AppError> {
+    let book_id_str = book_id.to_string();
+    let deleted = state
+        .db_service
+        .delete_page_favorite(&book_id_str, &filename)
+        .await?;
+    if !deleted {
+        return Err(AppError::NotFound(format!(
+            "page favorite for book {book_id} filename {filename}"
+        )));
+    }
+    Ok(Json(DeletePageFavoriteResponse { success: true }))
+}
+
+#[derive(Serialize)]
+pub struct AllPageFavoritesResponse {
+    pub pages: Vec<FavoritePageItem>,
+}
+
+#[derive(Serialize)]
+pub struct FavoritePageItem {
+    pub book_id: String,
+    pub book_title: String,
+    pub book_type: String,
+    pub filename: String,
+    pub w: Option<u32>,
+    pub h: Option<u32>,
+    pub next_file: Option<String>, // spread 右页 filename，None 表示非 spread
+}
+
+/// GET /api/page-favorites — 获取所有收藏页面（虚拟书籍）
+pub async fn list_all_page_favorites(
+    State(state): State<AppState>,
+) -> Result<Json<AllPageFavoritesResponse>, AppError> {
+    let favorites = state.db_service.get_all_page_favorites().await?;
+
+    // 预加载所有涉及书籍的 spreads，避免逐条查询
+    let mut book_spreads: std::collections::HashMap<String, Vec<page_spreads::Model>> = std::collections::HashMap::new();
+    for fav in &favorites {
+        if !book_spreads.contains_key(&fav.book_id) {
+            match state.db_service.get_spreads(&fav.book_id).await {
+                Ok(spreads) => {
+                    tracing::info!("[page-favorites] Loaded {} spreads for book {}", spreads.len(), fav.book_id);
+                    book_spreads.insert(fav.book_id.clone(), spreads);
+                }
+                Err(e) => {
+                    tracing::warn!("[page-favorites] Failed to load spreads for book {}: {}", fav.book_id, e);
+                }
+            }
+        }
+    }
+
+    let mut pages = Vec::new();
+    for fav in &favorites {
+        // 查找书籍信息
+        let book_id: i64 = fav.book_id.parse().unwrap_or(0);
+        if let Some(book) = state.db_service.get_book(book_id).await? {
+            // 从 pages_meta_json 中获取页面尺寸
+            let meta: Vec<crate::scanner::strategy::PageMeta> = book
+                .pages_meta_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str(json).ok())
+                .unwrap_or_default();
+
+            let (w, h) = if book.kind == "pdf" {
+                // PDF: filename 是页码序号
+                let page_idx: usize = fav.filename.parse::<usize>().unwrap_or(1).saturating_sub(1);
+                meta.get(page_idx).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None))
+            } else {
+                // image_book: filename 是文件名，需要在 pages_json 中找到索引
+                let page_paths: Vec<String> = serde_json::from_str(book.pages_json.as_deref().unwrap_or("[]"))
+                    .unwrap_or_default();
+                let idx = page_paths.iter().position(|p| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n == fav.filename)
+                }).unwrap_or(0);
+                meta.get(idx).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None))
+            };
+
+            // 查找该页是否是 spread 的左页
+            let next_file = book_spreads
+                .get(&fav.book_id)
+                .and_then(|spreads| {
+                    let found = spreads.iter()
+                        .find(|s| s.filename == fav.filename)
+                        .map(|s| s.next_file.clone());
+                    tracing::info!("[page-favorites] Looking for spread: book={} filename={} found={:?} ({} spreads available)", fav.book_id, fav.filename, found, spreads.len());
+                    found
+                });
+
+            pages.push(FavoritePageItem {
+                book_id: fav.book_id.clone(),
+                book_title: book.title.clone().unwrap_or_else(|| file_stem(&book.path)),
+                book_type: book.kind.clone(),
+                filename: fav.filename.clone(),
+                w,
+                h,
+                next_file,
+            });
+        }
+    }
+    Ok(Json(AllPageFavoritesResponse { pages }))
 }
 
 fn file_stem(path: &str) -> String {

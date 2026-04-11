@@ -58,4 +58,11 @@ CREATE TABLE IF NOT EXISTS user_data (
     value TEXT NOT NULL,
     PRIMARY KEY (book_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS page_favorites (
+    book_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+    PRIMARY KEY (book_id, filename)
+);
 "#;

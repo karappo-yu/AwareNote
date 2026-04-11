@@ -1,1 +1,0 @@
-import{gt as e}from"./api-C6qp9B4R.js";function t(){return e(`_q_`)}export{t};

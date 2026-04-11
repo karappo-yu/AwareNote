@@ -173,6 +173,14 @@
                         class="masonry-skeleton"
                         animation="fade"
                       />
+                      <!-- Page favorite badge -->
+                      <q-icon
+                        v-if="isPageFavorited(item)"
+                        name="favorite"
+                        color="pink-4"
+                        size="16px"
+                        class="page-fav-badge"
+                      />
                       <!-- Spread: two images side by side -->
                       <div v-if="item.isSpread" class="masonry-spread-container">
                         <img
@@ -203,6 +211,10 @@
                         @load="onMasonryImgLoad(item.page)"
                         @click="openViewer(item.page)"
                       />
+                    </div>
+                    <!-- Virtual book: show source book title -->
+                    <div v-if="isVirtualBook" class="virtual-page-source">
+                      {{ getPageSourceTitle(item) }}
                     </div>
                   </q-card>
                 </div>
@@ -355,12 +367,14 @@
               <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="flip" @click="viewerFlip" />
               <q-btn
                 flat round dense
-                :icon="book?.is_favorite ? 'favorite' : 'favorite_border'"
-                :color="book?.is_favorite ? 'pink' : 'white'"
+                :icon="isCurrentPageFavorited ? 'favorite' : 'favorite_border'"
+                :color="isCurrentPageFavorited ? 'pink' : 'white'"
                 size="sm"
                 class="viewer-tool-btn"
-                @click="closeViewer(); handleFavorite()"
-              />
+                @click="togglePageFavorite"
+              >
+                <q-tooltip>{{ isCurrentPageFavorited ? '取消收藏此页' : '收藏此页' }}</q-tooltip>
+              </q-btn>
               <!-- Spread buttons -->
               <template v-if="canCreateSpreadNext">
                 <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="join_inner" @click.stop="handleCreateSpreadNext">
@@ -399,7 +413,7 @@
         <!-- Cover -->
         <div class="row justify-center q-mb-lg">
           <q-img
-            :src="coverUrl(bookId)"
+            :src="virtualBookCover || coverUrl(bookId)"
             :ratio="3/4"
             fit="contain"
             style="border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); max-width: 200px; width: 100%"
@@ -457,7 +471,7 @@
           @click="openViewer(1)"
         />
 
-        <div class="row q-gutter-sm">
+        <div v-if="!isVirtualBook" class="row q-gutter-sm">
           <q-btn
             flat no-caps
             :icon="book.is_favorite ? 'favorite' : 'favorite_border'"
@@ -483,7 +497,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, reactive, nextTick } from 'vue'
 import { Dark, LocalStorage, useQuasar } from 'quasar'
-import { getBook, getBookPages, getSpreads, createSpread, deleteSpread, toggleFavorite, revealInFinder, coverUrl as coverUrlFn, pdfPageSvgUrl, imagePageByNameUrl, bookFormat, type BookDetail, type PageInfo, type SpreadInfo } from '../api'
+import { getBook, getBookPages, getSpreads, createSpread, deleteSpread, toggleFavorite, revealInFinder, coverUrl as coverUrlFn, pdfPageSvgUrl, imagePageByNameUrl, bookFormat, type BookDetail, type PageInfo, type SpreadInfo, getPageFavorites, createPageFavorite, deletePageFavorite, type PageFavoriteInfo, getAllPageFavorites, type FavoritePageItem } from '../api'
 import { useSettings } from '../stores/settings'
 
 const props = defineProps<{ id: string }>()
@@ -494,9 +508,12 @@ const settings = useSettings()
 const book = ref<BookDetail | null>(null)
 const pageNames = ref<PageInfo[]>([])  // image_book 页面文件名+尺寸列表
 const spreads = ref<SpreadInfo[]>([])  // spread 标记列表
+const pageFavorites = ref<PageFavoriteInfo[]>([])  // 页面收藏列表
+const favoritePageSources = ref<FavoritePageItem[]>([])  // 虚拟书来源信息
 const loading = ref(true)
 const infoDrawer = ref(false)
 const headerHover = ref(false)
+const isVirtualBook = computed(() => bookId.value === '__page_favorites__')
 let headerHideTimer: ReturnType<typeof setTimeout> | null = null
 
 // ============== 虚拟页面列表 ==============
@@ -543,6 +560,25 @@ const virtualPageList = computed<VirtualPage[]>(() => {
 
   return result
 })
+
+// 检查瀑布流项是否已收藏
+function isPageFavorited(item: { isSpread: boolean; page?: number; pages?: [number, number] | null; filename: string }) {
+  if (item.isSpread && item.pages) {
+    const leftFilename = pageNames.value[item.pages[0] - 1]?.filename
+    const rightFilename = pageNames.value[item.pages[1] - 1]?.filename
+    if (!leftFilename || !rightFilename) return false
+    return pageFavorites.value.some(f => f.filename === leftFilename) &&
+           pageFavorites.value.some(f => f.filename === rightFilename)
+  }
+  return pageFavorites.value.some(f => f.filename === item.filename)
+}
+
+// 虚拟书：获取收藏页的来源书名
+function getPageSourceTitle(item: { isSpread: boolean; page?: number; pages?: [number, number] | null }) {
+  const page = item.isSpread ? item.pages![0] : item.page!
+  const source = favoritePageSources.value[page - 1]
+  return source?.book_title || ''
+}
 
 // 返回顶部
 const showBackToTop = ref(false)
@@ -697,15 +733,17 @@ const masonryLayoutItems = computed(() => {
     // spread 容器宽度虽然包含中间 gap，但高度应等于同列宽下单页的高度
     const colWidthPx = containerWidth * colWidthPct / 100
     const itemHeight = colWidthPx / singleAspect
+    // 虚拟书：底部有来源书名文字行，需额外高度
+    const virtualSourceHeight = isVirtualBook.value ? 28 : 0
 
     const top = colHeights[minCol]
     // 更新涉及的列高度
     if (widthCols === 2) {
-      const newHeight = top + itemHeight + gap
+      const newHeight = top + itemHeight + virtualSourceHeight + gap
       colHeights[minCol] = newHeight
       colHeights[minCol + 1] = newHeight
     } else {
-      colHeights[minCol] = top + itemHeight + gap
+      colHeights[minCol] = top + itemHeight + virtualSourceHeight + gap
     }
 
     // wrapperStyle 的 aspectRatio
@@ -755,6 +793,7 @@ const masonryContainerStyle = computed(() => {
   const isPdf = book.value && bookFormat(book.value.type) === 'pdf'
   const DEFAULT_ASPECT = isPdf ? 0.7071 : 1
   const containerWidth = masonryContainerRef.value?.clientWidth || 900
+  const virtualSourceHeight = isVirtualBook.value ? 28 : 0
   const maxTop = Math.max(...items.map(item => {
     const top = parseFloat(item.style.top)
     const itemWidthPct = parseFloat(item.style.width)
@@ -769,7 +808,7 @@ const masonryContainerStyle = computed(() => {
       }
     }
     const itemHeight = itemWidthPx / aspectRatio
-    return top + itemHeight
+    return top + itemHeight + virtualSourceHeight
   }))
   return {
     position: 'relative' as const,
@@ -843,6 +882,83 @@ const currentViewerSpread = computed<[number, number] | null>(() => {
   return null
 })
 
+// 当前查看器页面是否已收藏
+const isCurrentPageFavorited = computed(() => {
+  // 虚拟书：所有页面都是已收藏的
+  if (isVirtualBook.value) return true
+  const p = viewerPage.value
+  const filename = pageNames.value[p - 1]?.filename
+  if (!filename) return false
+  // spread 时，左右两页都收藏了才算已收藏
+  if (currentViewerSpread.value) {
+    const leftFilename = pageNames.value[currentViewerSpread.value[0] - 1]?.filename
+    const rightFilename = pageNames.value[currentViewerSpread.value[1] - 1]?.filename
+    if (!leftFilename || !rightFilename) return false
+    return pageFavorites.value.some(f => f.filename === leftFilename) &&
+           pageFavorites.value.some(f => f.filename === rightFilename)
+  }
+  return pageFavorites.value.some(f => f.filename === filename)
+})
+
+// 收藏/取消收藏当前页
+async function togglePageFavorite() {
+  if (!book.value) return
+  const p = viewerPage.value
+
+  // 虚拟书：取消收藏（从来源书中删除）
+  if (isVirtualBook.value) {
+    if (currentViewerSpread.value) {
+      const leftInfo = favoritePageSources.value.find(s =>
+        pageNames.value[currentViewerSpread.value![0] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
+      )
+      const rightInfo = favoritePageSources.value.find(s =>
+        pageNames.value[currentViewerSpread.value![1] - 1]?.filename === `fav://${s.book_id}/${s.filename}`
+      )
+      if (leftInfo) await deletePageFavorite(leftInfo.book_id, leftInfo.filename)
+      if (rightInfo) await deletePageFavorite(rightInfo.book_id, rightInfo.filename)
+      $q.notify({ type: 'info', message: '已取消收藏拼接页' })
+    } else {
+      const filename = pageNames.value[p - 1]?.filename
+      if (!filename) return
+      const source = favoritePageSources.value.find(s => filename === `fav://${s.book_id}/${s.filename}`)
+      if (!source) return
+      await deletePageFavorite(source.book_id, source.filename)
+      $q.notify({ type: 'info', message: '已取消收藏' })
+    }
+    // 重新加载虚拟书
+    await loadBook()
+    return
+  }
+
+  // 普通书籍
+  if (currentViewerSpread.value) {
+    const leftFilename = pageNames.value[currentViewerSpread.value[0] - 1]?.filename
+    const rightFilename = pageNames.value[currentViewerSpread.value[1] - 1]?.filename
+    if (!leftFilename || !rightFilename) return
+    if (isCurrentPageFavorited.value) {
+      await deletePageFavorite(bookId.value, leftFilename)
+      await deletePageFavorite(bookId.value, rightFilename)
+      $q.notify({ type: 'info', message: '已取消收藏' })
+    } else {
+      await createPageFavorite(bookId.value, leftFilename)
+      await createPageFavorite(bookId.value, rightFilename)
+      $q.notify({ type: 'positive', message: '已收藏拼接页' })
+    }
+  } else {
+    const filename = pageNames.value[p - 1]?.filename
+    if (!filename) return
+    if (isCurrentPageFavorited.value) {
+      await deletePageFavorite(bookId.value, filename)
+      $q.notify({ type: 'info', message: '已取消收藏' })
+    } else {
+      await createPageFavorite(bookId.value, filename)
+      $q.notify({ type: 'positive', message: '已收藏' })
+    }
+  }
+  // 重新加载收藏列表
+  pageFavorites.value = await getPageFavorites(bookId.value)
+}
+
 // 当前查看器页面能否创建 spread
 const canCreateSpreadNext = computed(() => {
   if (!book.value) return false
@@ -909,8 +1025,24 @@ const panOffset = reactive({ x: 0, y: 0 })
 
 const coverUrl = coverUrlFn
 
+// 虚拟书封面：用第一张收藏页的图片
+const virtualBookCover = computed(() => {
+  if (!isVirtualBook.value || favoritePageSources.value.length === 0) return ''
+  return getPageUrl(1)
+})
+
 function getPageUrl(page: number, realsize = false) {
   if (!book.value) return ''
+  // 虚拟书：从来源信息中构建真实 URL
+  if (isVirtualBook.value) {
+    const source = favoritePageSources.value[page - 1]
+    if (!source) return ''
+    if (source.book_type === 'pdf') {
+      const pageNum = parseInt(source.filename, 10)
+      return pdfPageSvgUrl(source.book_id, pageNum)
+    }
+    return imagePageByNameUrl(source.book_id, source.filename, realsize)
+  }
   if (bookFormat(book.value.type) === 'pdf') {
     return pdfPageSvgUrl(bookId.value, page)
   }
@@ -1086,7 +1218,7 @@ function cycleTheme() {
 }
 
 async function handleFavorite() {
-  if (!book.value) return
+  if (!book.value || isVirtualBook.value) return
   try {
     await toggleFavorite(bookId.value, book.value.is_favorite)
     book.value.is_favorite = !book.value.is_favorite
@@ -1095,6 +1227,7 @@ async function handleFavorite() {
 }
 
 async function handleReveal() {
+  if (isVirtualBook.value) return
   try {
     await revealInFinder(bookId.value)
     $q.notify({ type: 'info', message: '已在 Finder 中打开' })
@@ -1105,18 +1238,58 @@ async function loadBook() {
   loading.value = true
   pageNames.value = []
   spreads.value = []
+  pageFavorites.value = []
   try {
+    // 虚拟书：收藏的页面
+    if (isVirtualBook.value) {
+      const pages = await getAllPageFavorites()
+      book.value = {
+        id: '__page_favorites__',
+        title: '收藏的页面',
+        path: '',
+        type: 'image_book',
+        page_count: pages.length,
+        is_favorite: true,
+        description: null,
+        optimization_strategy: 0,
+        avg_page_pixels: null,
+        is_oversized: false,
+      }
+      masonryLoaded.value = MASONRY_BATCH
+      // 构建虚拟页面列表
+      pageNames.value = pages.map(p => ({
+        filename: `fav://${p.book_id}/${p.filename}`,
+        w: p.w ?? 800,
+        h: p.h ?? 1200,
+      }))
+      // 构建 spread 信息：收藏页中 next_file 非空的表示 spread 左页
+      // next_file 是原书中的真实文件名，需要找到对应的虚拟书页码
+      spreads.value = pages
+        .filter(p => p.next_file !== null)
+        .map(p => ({
+          book_id: '__page_favorites__',
+          filename: `fav://${p.book_id}/${p.filename}`,
+          next_file: `fav://${p.book_id}/${p.next_file}`,
+          created_at: 0,
+        }))
+      // 存储来源信息供详情页和查看器使用
+      favoritePageSources.value = pages
+      setupScrollObserver()
+      return
+    }
     book.value = await getBook(bookId.value)
     masonryLoaded.value = MASONRY_BATCH
     // 所有类型都加载页面列表和尺寸信息（用于瀑布流布局）
     if (book.value) {
       try {
-        const [pages, spreadData] = await Promise.all([
+        const [pages, spreadData, favData] = await Promise.all([
           getBookPages(bookId.value),
           getSpreads(bookId.value),
+          getPageFavorites(bookId.value),
         ])
         pageNames.value = pages
         spreads.value = spreadData
+        pageFavorites.value = favData
       } catch {
         // 加载失败时回退到序号请求
         console.warn('Failed to load page info, falling back to index-based URLs')

@@ -229,6 +229,39 @@ export const deleteSpread = (id: string, filename: string) =>
   api.delete(`/books/${id}/spreads/${encodeURIComponent(filename)}`)
     .then(r => r.data as { success: boolean })
 
+// --- Page Favorites ---
+export interface PageFavoriteInfo {
+  book_id: string
+  filename: string
+  created_at: number
+}
+
+export interface FavoritePageItem {
+  book_id: string
+  book_title: string
+  book_type: string
+  filename: string
+  w: number | null
+  h: number | null
+  next_file: string | null  // spread 右页 filename，null 表示非 spread
+}
+
+export const getPageFavorites = (id: string) =>
+  api.get(`/books/${id}/page-favorites`)
+    .then(r => r.data.favorites as PageFavoriteInfo[])
+
+export const createPageFavorite = (id: string, filename: string) =>
+  api.post(`/books/${id}/page-favorites`, { filename })
+    .then(r => r.data as { success: boolean; favorite: PageFavoriteInfo })
+
+export const deletePageFavorite = (id: string, filename: string) =>
+  api.delete(`/books/${id}/page-favorites/${encodeURIComponent(filename)}`)
+    .then(r => r.data as { success: boolean })
+
+export const getAllPageFavorites = () =>
+  api.get('/page-favorites')
+    .then(r => r.data.pages as FavoritePageItem[])
+
 export const imagePageByNameUrl = (id: string, filename: string, realsize = false) =>
   `/api/books/${id}/page/${encodeURIComponent(filename)}${realsize ? '?realsize=true' : ''}`
 
