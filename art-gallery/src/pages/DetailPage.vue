@@ -312,6 +312,8 @@
               flat
               :icon="isRtl ? 'chevron_right' : 'chevron_left'"
               @click.stop="viewerPrev()"
+              @mouseenter="arrowHoverIn"
+              @mouseleave="arrowHoverOut"
             />
           </transition>
 
@@ -325,6 +327,8 @@
               flat
               :icon="isRtl ? 'chevron_left' : 'chevron_right'"
               @click.stop="viewerNext()"
+              @mouseenter="arrowHoverIn"
+              @mouseleave="arrowHoverOut"
             />
           </transition>
 
@@ -1110,7 +1114,18 @@ async function handleDeleteSpread() {
 
 // Arrow auto-hide
 const arrowsVisible = ref(false)
+const arrowHovered = ref(false)
 let hideTimer: ReturnType<typeof setTimeout> | null = null
+
+function arrowHoverIn() {
+  arrowHovered.value = true
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null }
+}
+
+function arrowHoverOut() {
+  arrowHovered.value = false
+  resetArrowTimer()
+}
 
 function onViewerMouseMove(e: MouseEvent) {
   if (!viewerOpen.value) return
@@ -1205,7 +1220,9 @@ function resetArrowTimer() {
   arrowsVisible.value = true
   if (hideTimer) clearTimeout(hideTimer)
   hideTimer = setTimeout(() => {
-    arrowsVisible.value = false
+    if (!arrowHovered.value) {
+      arrowsVisible.value = false
+    }
   }, 3000)
 }
 
