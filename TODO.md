@@ -1,239 +1,129 @@
-# TODO
+# Art Gallery 开发 TODO
 
-## Issue: macOS app silently fails when configured port is already in use
+## 优先级 P0 — 近期必做
 
-### Background
-- `AwareNote.app` is a local macOS menu bar wrapper around the Rust backend and web UI.
-- The app is expected to feel like a desktop utility, even though the actual reading experience is still delivered through the browser.
-- Because it is a local tool, startup feedback matters more than abstract server purity. If launch fails, the app should explain why.
+### 1. 收藏页跳转到原书
+- [ ] 虚拟书查看器底栏加"跳转到原书"按钮
+- [ ] 点击后路由到 `/books/:sourceBookId?page=N`
+- [ ] DetailPage `onMounted` 读取 `?page=N` 参数，自动 `openViewer(N)`
+- [ ] 瀑布流/查看器里 hover 显示来源书名（解决"忘了这页来自哪本书"的问题）
 
-### Current problem
-- If the configured local port, such as `3001`, is already occupied, clicking `AwareNote.app` may appear to do nothing.
-- This creates an especially bad experience because from the user's perspective there is no visible error, no running window, and no obvious recovery path.
-- The failure may come from two very different situations:
-- A previous AwareNote backend is already running.
-- Another unrelated process is already using the configured port.
+### 2. 已知 Bug 修复
+- [ ] 取消收藏后加 Notify 提示 + undo 按钮（防误操作）
+- [ ] `src/frontend/` 构建产物加入 `.gitignore`，减少 commit 噪音
+- [ ] DetailPage 组件拆分（viewer / masonry / info-drawer 独立组件）
 
-### Why this should be fixed
-- Silent failure makes the app feel broken or incomplete.
-- The actual issue is usually recoverable, but the current UX does not surface the recovery path.
-- For a menu bar app, "no visible reaction" is one of the worst failure modes.
+---
 
-### Goal
-- Make startup failure observable and actionable.
-- Distinguish between "AwareNote is already running" and "another process is using the port".
-- Preserve the current explicit port configuration model instead of introducing hidden behavior.
+## 优先级 P1 — 核心功能扩展
 
-### Proposed startup flow
-1. Launch app and attempt to start backend on the configured host and port.
-2. If startup succeeds:
-- Continue normal startup.
-- Menu bar status remains the normal running state.
-3. If bind fails because the port is occupied:
-- Probe the configured local web endpoint.
-- Perform a lightweight health or identity check against the existing process.
-4. If the process already listening on that port is AwareNote itself:
-- Treat this as "already running", not as an error state.
-- Open the existing web UI, or otherwise foreground the existing running session.
-- Avoid showing an error dialog in this branch.
-5. If the process listening on that port is not AwareNote:
-- Show a native macOS alert immediately.
-- State the exact configured port that failed, for example `3001`.
-- Explain that another process is already using the configured port.
-- Offer clear next actions instead of failing silently.
+### 3. CBZ 漫画格式支持
+- [ ] 后端扫描时识别 `.cbz` 文件
+- [ ] 用 Rust `zip` crate 解压到临时目录（或缓存目录）
+- [ ] 按文件名排序提取图片列表，作为 `image_book` 处理
+- [ ] 解析 ComicInfo.xml 元数据：
+  - `Manga` 字段 → 自动设置 `reading_direction`（YesAndRightToLeft=rtl）
+  - `Pages/Page[DoublePage]` → 自动生成 spread 记录
+  - `Series`+`Number` / `Title` → 替代文件名作为书名
+  - `Writer`/`Penciller` → 按作者筛选
+- [ ] 无 ComicInfo.xml 时：默认 `reading_direction = 'rtl'`（漫画格式默认 RTL）
+- [ ] 缓存策略：解压后缓存图片路径，避免每次重新解压
+- [ ] 前端无感知，统一走 image_book 的渲染逻辑
 
-### Proposed alert content
-- Title: `AwareNote 无法启动服务`
-- Body: `配置的端口 3001 已被其他进程占用，请修改端口后重试。`
-- Buttons:
-- `打开设置`
-- `退出`
+### 4. 单页/Spread 导出（两种方式）
+- [ ] 导出目录默认 `~/Pictures/ArtGallery Exports/`，设置中可自定义
+- [ ] 导出目录注册为 image_book（books 表加 `is_export_dir` 标记），侧边栏单独分组显示
+- [ ] 查看器底栏加"导出"按钮，下拉菜单两种方式：
+  - **保存到导出目录**：后端生成图片保存到导出目录，自动刷新 book 记录，app 内可浏览
+  - **下载到本地**：浏览器直接下载到系统 Downloads，不进书库
+- [ ] "在 Finder 中显示"按钮（仅保存到导出目录时显示）
+- [ ] 单页导出 API：
+  - `POST /api/books/:id/pages/:filename/export` → 保存到导出目录
+  - `GET /api/books/:id/pages/:filename/download` → 浏览器下载
+  - image_book：拷贝/透传原图；PDF：mupdf 渲染为 PNG
+  - 文件命名：`书名_页码.png`
+- [ ] Spread 拼接导出 API：
+  - `POST /api/books/:id/spreads/:filename/export` → 保存到导出目录
+  - `GET /api/books/:id/spreads/:filename/download` → 浏览器下载
+  - 查 page_spreads 拿 next_file / direction / overlap，按 direction 拼合，应用 overlap
+  - 文件命名：`书名_左页-右页_spread.png`
+- [ ] 导出后自动刷新导出目录的 book 记录（增量添加 page meta）
+- [ ] 虚拟书（收藏页）导出：后端根据 source book_type 分别取图再拼
 
-### Optional alert variants
-- If desired, a third button could be added later:
-- `重试`
-- But retry is only useful if configuration has already changed, so it is not necessary for the first version.
+### 5. 收藏页一键导出 ZIP
+- [ ] 后端 API：`POST /api/page-favorites/export`
+- [ ] 遍历收藏页，收集图片文件路径和 PDF SVG 缓存路径
+- [ ] PDF 页面如无 SVG 缓存，即时用 mupdf 渲染
+- [ ] ZIP 内结构：`来源书名/页码.ext`，保留来源信息
+- [ ] spread 关系记录到 `metadata.json`
+- [ ] 异步打包 + 进度推送（SSE 或轮询）
+- [ ] 前端：虚拟书详情页或收藏页加"导出"按钮
 
-### Detection details
-- The "is this already AwareNote?" check should be based on an explicit backend identity signal, not a vague HTML match.
-- Best options:
-- A dedicated health endpoint response containing an app identifier.
-- An existing JSON endpoint that reliably proves the server is AwareNote.
-- The check should be lightweight and only run after bind failure, not on every successful startup path.
+### 5.5 导出为 CBZ（含 ComicInfo.xml）
+- [ ] 任何书籍（image_book）都可导出为 CBZ 格式
+- [ ] 自动生成 ComicInfo.xml，填充已有元数据：
+  - `reading_direction` → `<Manga>` 字段
+  - `page_spreads` → `<Page DoublePage="true">`
+  - 书名/分类 → `<Title>` / `<Series>` / `<Genre>`
+  - 手动填写的作者/出版社 → `<Writer>` / `<Publisher>`
+- [ ] 元数据编辑 UI：信息抽屉加"编辑元数据"（作者/出版社/系列/卷号等）
+- [ ] 元数据存储到 `user_data` 表（保持非侵入，不动原文件）
+- [ ] 后端 API：`POST /api/books/:id/export-cbz`
+- [ ] 完整工作流：原始素材 → 浏览/标记/编辑 → 导出标准化 CBZ → 任何阅读器可用
 
-### Menu bar behavior
-- Even if an alert is shown, the menu bar state should remain understandable.
-- If startup fails, the menu could expose a temporary error state, such as:
-- `启动失败：端口 3001 已被占用`
-- And actions such as:
-- `打开设置`
-- `重试`
-- `退出`
-- This is a useful follow-up, but not required for the first fix.
+---
 
-### Settings integration
-- `Open Settings` should take the user directly to the existing native settings UI.
-- The relevant control is the configured port field.
-- The fix should avoid making users hunt through the UI for the reason startup failed.
+## 优先级 P2 — 体验优化
 
-### Explicitly not preferred for now
-- Do not silently switch to a random fallback port by default.
-- Automatic port fallback would make local bookmarks and LAN access less predictable.
-- Automatic fallback would also make debugging harder because the app would no longer be using the configured value the user expects.
-- Do not hide the failure only in logs.
-- For this kind of local desktop wrapper, a visible user-facing explanation is required.
+### 5. CBR 漫画格式支持
+- [ ] 引入 `unrar` 解压依赖
+- [ ] 扫描识别 `.cbr` 文件，解压后同 CBZ 处理
+- [ ] 评估是否值得引入外部依赖（CBR 使用率是否足够高）
 
-### Edge cases to think through
-- The configured port may be occupied by another AwareNote instance started from Terminal rather than Finder.
-- The configured endpoint may respond slowly during startup race conditions.
-- A stale browser tab may exist even though the backend is not currently available.
-- The backend might fail for a reason other than port conflict; those cases should still surface a visible failure path instead of silently doing nothing.
+### 6. EPUB 格式支持（优先级最低）
+- [ ] 解析 EPUB 的 OPF 目录结构
+- [ ] 提取图片和页面顺序
+- [ ] 考虑是否值得做（EPUB 主要是文字书，和画册场景不匹配）
 
-### Implementation notes
-- This should be handled in the native macOS launcher path, not just in backend logs.
-- The backend error needs to be propagated to the native layer in a structured enough way to distinguish address-in-use from generic startup failure.
-- If the backend process is spawned as a child, the launcher needs a short startup observation window so it can detect immediate failure instead of assuming launch succeeded.
+### 7. RTL 自动检测
+- [ ] 扫描时根据文件格式（CBZ/CBR）自动设置 `reading_direction = 'rtl'`
+- [ ] 可选：根据文件夹名中的日文特征自动判断
 
-### Acceptance criteria
-- When port `3001` is occupied by another process, opening `AwareNote.app` produces a visible native error prompt.
-- The prompt clearly states that the configured port is in use.
-- The prompt allows the user to open settings immediately.
-- When port `3001` is already being used by AwareNote itself, opening `AwareNote.app` does not show an error and instead opens or reuses the existing service.
-- The app no longer appears to do nothing in either case.
+### 8. 统一书籍过滤器
+- [ ] 筛选状态定义（format / direction / categoryId / favoriteOnly）
+- [ ] 顶部工具栏：格式 QBtnToggle（全部/PDF/图片包/CBZ/CBR）
+- [ ] 顶部工具栏：阅读方向 QBtnToggle（全部/LTR/RTL）
+- [ ] 前端 computed 过滤书籍列表（当前数据量前端过滤即可）
+- [ ] 过滤结果数量显示
+- [ ] 将来书多了再推后端过滤（API query 参数）
 
-## Issue: whether to surface unsupported archive files
+### 9. 移动端适配（查看器优先级最高）
+- [ ] **查看器（最紧急）**：
+  - 触屏手势：滑动翻页（Quasar TouchPan 指令）
+  - 双指缩放（pinch-to-zoom）
+  - 点击区域翻页（左半屏=上一页，右半屏=下一页，RTL 反转）
+  - 隐藏桌面端箭头按钮，改为轻触屏幕中央唤出控制栏
+  - Spread 双图在窄屏的适配
+- [ ] 侧边栏：移动端改为抽屉式（QDrawer behavior: mobile）
+- [ ] 瀑布流：移动端强制 2 列，调整间距
+- [ ] 详情页：信息抽屉移动端改为全屏覆盖
+- [ ] 底栏按钮：加大触摸区域
+- [ ] DetailPage 拆分组件：MasonryViewer / ImageViewer / InfoDrawer
+- [ ] App 级 `appReady` 状态，统一初始化链路，彻底避免 settings loaded 时序问题
+- [ ] 书籍列表展示模式：支持分页/瀑布流切换（已有 grid/list/masonry，缺分页+瀑布流）
 
-### Background
-- The project intentionally focuses on `PDF + native image folders`.
-- It does not currently support direct reading of `zip` / `rar` / `7z` and similar archive formats.
-- This is a deliberate scope decision rather than a missing bug fix.
+### 10. Spread 拼接偏移量
+- [ ] `page_spreads` 表新增 `overlap` 字段（INTEGER DEFAULT 0，单位 px）
+- [ ] 创建 spread API 新增 `overlap` 参数
+- [ ] 查看器底栏拼接操作加偏移量滑块（-50~50px，0=无缝拼接，正=重叠，负=留间隙）
+- [ ] 瀑布流 spread 渲染：两张子图重叠 overlap 像素（第二张 margin-left: -overlap）
+- [ ] 查看器 spread 渲染：同理
+- [ ] 虚拟书 spread 保留 overlap 信息
 
-### Why this came up
-- In real libraries, unsupported archive files may sit beside normal books.
-- If scanning ignores them completely, they become invisible in the UI.
-- That invisibility can make it feel like scanning missed files.
+---
 
-### Main design tension
-- If archives are shown, the model becomes more complex.
-- If archives are ignored, the model stays cleaner but loses visibility.
-- The complexity increases further when an archive is not at category root, but inside what is otherwise treated as a normal image-folder book.
+## 技术债务
 
-### Options discussed
-
-### Option A: keep ignoring archives completely
-- Pros:
-- Keeps the current model clean.
-- No extra scan, DB, API, or UI complexity.
-- Matches the current project boundary.
-- Cons:
-- Users cannot tell whether an archive was skipped or never existed.
-
-### Option B: show archives as unsupported placeholder resources
-- Pros:
-- Makes skipped files visible.
-- Better explains scan results.
-- Cons:
-- Requires a parallel "non-book resource" model.
-- Raises questions about where these placeholders should appear:
-- category level
-- inside a book
-- separate unsupported section
-- This quickly becomes broader than a small UX tweak.
-
-### Option C: treat archives as a special book type
-- Pros:
-- Simplest implementation path if visibility is required.
-- Can reuse much of the existing book list, category, search, and storage flow.
-- Archives could appear in the UI with basic metadata and an action like `Open in Finder`.
-- Cons:
-- Pollutes the meaning of "book", because these entries are not actually readable.
-- Would require special-case behavior in list, detail, and action logic.
-
-### Current conclusion
-- Do not implement archive support for now.
-- If this is ever revisited, the most practical route is probably Option C:
-- treat archives as a special non-readable book type
-- allow basic visibility
-- do not provide reader/detail parity with normal books
-- For the current stage of the project, continuing to ignore unsupported archives is the cleaner choice.
-
-### Explicit non-goals
-- Do not add direct archive reading just for completeness.
-- Do not introduce auto-extraction or temporary unpacking logic.
-- Do not mutate source files or reorganize archive contents.
-
-### Revisit trigger
-- Only revisit this if unsupported archives become a frequent real-world nuisance in day-to-day use.
-- Do not expand the scope based on theoretical completeness alone.
-
-## Issue: future web frontend rewrite
-
-### Background
-- The current frontend is still the old HTML + JavaScript implementation embedded into the Rust binary.
-- It is usable, but maintainability is weak and mobile adaptation is not good enough.
-- A previous attempt to move toward `Vue + Quasar` was stopped midway because the result still carried too much old-page structure and did not really use Quasar as a component system.
-
-### Why this matters
-- The project only has a few core pages:
-- home/library page
-- book detail page
-- settings page
-- In theory this is small enough to rewrite cleanly.
-- In practice, if the rewrite keeps dragging old DOM structure and imperative page logic forward, it loses most of the benefit.
-
-### Current conclusion
-- Do not continue incremental frontend migration inside the current old-page structure.
-- If a rewrite is done in the future, it should be treated as a genuinely new frontend project rather than a patchwork port.
-
-### Rewrite goals
-- Improve maintainability through componentized structure.
-- Improve mobile and tablet usability without needing separate pages.
-- Preserve the current backend API-first architecture.
-- Keep reading/preview behavior working for both desktop and mobile browsers.
-
-### Framework direction
-- `Quasar` remains the preferred direction if the frontend is rewritten.
-- The reason is practical rather than fashionable:
-- it already provides responsive UI primitives
-- it fits both desktop and mobile use
-- it reduces the need to hand-roll layout and interaction details
-
-### Important constraint for a future rewrite
-- Do not let the old frontend's DOM structure dictate the new implementation.
-- The rewrite should be designed from backend capabilities and actual user flows, not copied from existing HTML fragments.
-- Avoid large amounts of raw `div`-driven layout when Quasar already provides an appropriate component.
-
-### Expected page structure
-- Home:
-- libraries
-- categories
-- book grid
-- favorite view
-- Book detail:
-- metadata
-- cover
-- path and local-file actions
-- links into reader/preview
-- Settings:
-- configuration editing
-- cache actions
-- scan actions
-
-### Component expectations
-- Prefer Quasar components for page scaffolding, navigation, lists, cards, forms, dialogs, and actions.
-- Avoid recreating generic UI pieces manually with plain HTML containers unless there is a clear reason.
-- Build from reusable components instead of page-level script blobs.
-
-### API guidance
-- The rewrite should treat the Rust backend as the source of truth.
-- Frontend data flow should be designed around backend endpoints and domain concepts, not around preserving old ad hoc page scripts.
-- Avoid repeated, fragmented fetching when a single full response is already available and appropriate for the local-tool use case.
-
-### Explicit non-goals
-- Do not mix half-rewritten Vue pages with large leftover blocks of legacy static HTML.
-- Do not optimize for public SaaS patterns; this is still a local-first tool.
-- Do not force feature expansion just because a rewrite is happening.
-
-### Revisit trigger
-- Revisit only when there is enough time and energy to build a clean replacement in one dedicated effort.
-- Do not restart frontend rewriting as a side quest during backend maintenance.
+- [ ] `src/frontend/` 构建产物从 git 跟踪中彻底移除（加 `.gitignore`）
+- [ ] Cargo 编译警告：`strategy.rs` 中 `mtime`/`size` 未使用变量
+- [ ] 统一前端状态初始化时机（settings.loaded watch 散落多处）
