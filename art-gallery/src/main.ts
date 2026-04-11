@@ -10,18 +10,21 @@ import './css/app.sass'
 
 import App from './App.vue'
 
-// Restore theme preference
-const savedDark = LocalStorage.getItem<boolean>('darkMode')
-Dark.set(savedDark !== null ? savedDark : true)
-
 const app = createApp(App)
 app.use(Quasar, {
   plugins: { Notify, Dialog },
   config: {
-    dark: 'auto',
     notify: { position: 'bottom-right' }
   }
 })
 app.use(router)
 app.use(pinia)
 app.mount('#app')
+
+// Restore theme preference after Quasar init
+const savedTheme = LocalStorage.getItem<'auto' | 'light' | 'dark'>('themeMode') || 'auto'
+if (savedTheme === 'auto') {
+  Dark.set(window.matchMedia('(prefers-color-scheme: dark)').matches)
+} else {
+  Dark.set(savedTheme === 'dark')
+}

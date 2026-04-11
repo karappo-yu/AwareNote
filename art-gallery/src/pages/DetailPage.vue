@@ -75,8 +75,8 @@
           </q-popup-proxy>
         </q-btn>
 
-        <q-btn flat round dense :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'" size="sm" @click="toggleDark">
-          <q-tooltip>{{ $q.dark.isActive ? '亮色模式' : '暗色模式' }}</q-tooltip>
+        <q-btn flat round dense :icon="themeIcon" size="sm" @click="cycleTheme">
+          <q-tooltip>{{ themeLabel }}</q-tooltip>
         </q-btn>
         <q-btn flat round dense icon="home" size="sm" @click="$router.push({ name: 'gallery' })">
           <q-tooltip>返回首页</q-tooltip>
@@ -1059,9 +1059,30 @@ function onDocMouseMove(e: MouseEvent) {
   }
 }
 
-function toggleDark() {
-  Dark.toggle()
-  LocalStorage.set('darkMode', Dark.isActive)
+// 三态主题：auto → light → dark → auto
+type ThemeMode = 'auto' | 'light' | 'dark'
+const themeMode = ref<ThemeMode>((LocalStorage.getItem<ThemeMode>('themeMode')) || 'auto')
+const prefersDark = computed(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+function applyTheme(mode: ThemeMode) {
+  themeMode.value = mode
+  LocalStorage.set('themeMode', mode)
+  if (mode === 'auto') Dark.set(prefersDark.value)
+  else Dark.set(mode === 'dark')
+}
+
+const themeIcon = computed(() => {
+  if (themeMode.value === 'auto') return 'brightness_auto'
+  return $q.dark.isActive ? 'light_mode' : 'dark_mode'
+})
+const themeLabel = computed(() => {
+  if (themeMode.value === 'auto') return '跟随系统'
+  return $q.dark.isActive ? '亮色模式' : '暗色模式'
+})
+
+function cycleTheme() {
+  const next: ThemeMode = themeMode.value === 'auto' ? 'light' : themeMode.value === 'light' ? 'dark' : 'auto'
+  applyTheme(next)
 }
 
 async function handleFavorite() {
