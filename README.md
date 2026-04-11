@@ -274,6 +274,20 @@ cd awarenotes
 
 > ⚠️ **免责声明**：本项目全程采用 vibe coding 编写，质量不能保证，请自行判断使用风险！建议使用 AI 助手阅读理解代码。
 
+---
+
+### ⚠️ macOS 用户提示
+
+由于本应用**未进行代码签名**，下载后首次运行会被 macOS 拦截。请在终端执行以下命令解除限制：
+
+```bash
+xattr -cr /Applications/AwareNote.app
+```
+
+然后即可正常启动应用。
+
+---
+
 **后端（Rust）**：
 
 ```bash
