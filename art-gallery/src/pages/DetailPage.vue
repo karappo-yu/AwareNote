@@ -775,6 +775,7 @@ const masonryLayoutItems = computed(() => {
 
   // 列高度跟踪
   const colHeights = new Array(colCount).fill(0)
+  let currentCol = 0  // 轮转指针
 
   return items.map((item) => {
     const isSpread = item.type === 'spread'
@@ -812,37 +813,58 @@ const masonryLayoutItems = computed(() => {
     let left: number
     let itemWidthPct: number
 
+    // 阈值：超过最短列 + 这个值就切换列（基于列宽自适应）
+    const colWidthPx = containerWidth * colWidthPct / 100
+    const heightThreshold = colWidthPx / singleAspect  // 一张图片的高度
+
     if (widthCols === 2) {
-      // spread 占两列：找相邻两列高度和最小的位置
+      // spread 占两列
       if (colCount < 2) {
-        // 只有一列时无法放 spread，当单列处理
         minCol = 0
         left = 0
         itemWidthPct = colWidthPct
         widthCols = 1
       } else {
-        let bestPair = 0
-        let bestHeight = Infinity
-        for (let c = 0; c <= colCount - 2; c++) {
-          const pairHeight = Math.max(colHeights[c], colHeights[c + 1])
-          if (pairHeight < bestHeight) {
-            bestHeight = pairHeight
-            bestPair = c
+        // 顺序优先 + 阈值判断
+        const shortestHeight = Math.min(...colHeights)
+        const currentHeight = Math.max(colHeights[currentCol], colHeights[currentCol + 1] ?? Infinity)
+        if (currentCol <= colCount - 2 && currentHeight <= shortestHeight + heightThreshold) {
+          minCol = currentCol
+          currentCol = (currentCol + 2) % colCount
+        } else {
+          // 超过阈值，找最短的两列
+          let bestPair = 0
+          let bestHeight = Infinity
+          for (let c = 0; c <= colCount - 2; c++) {
+            const pairHeight = Math.max(colHeights[c], colHeights[c + 1])
+            if (pairHeight < bestHeight) {
+              bestHeight = pairHeight
+              bestPair = c
+            }
           }
+          minCol = bestPair
+          currentCol = (bestPair + 2) % colCount
         }
-        minCol = bestPair
         left = minCol * (colWidthPct + gapPct)
-        itemWidthPct = 2 * colWidthPct + gapPct  // 两列宽度 + 中间 gap
+        itemWidthPct = 2 * colWidthPct + gapPct
       }
     } else {
-      minCol = colHeights.indexOf(Math.min(...colHeights))
+      // 单列：顺序优先 + 阈值判断
+      const shortestHeight = Math.min(...colHeights)
+      const currentHeight = colHeights[currentCol]
+      if (currentHeight <= shortestHeight + heightThreshold) {
+        minCol = currentCol
+      } else {
+        // 超过阈值，切换到最短列
+        minCol = colHeights.indexOf(Math.min(...colHeights))
+      }
+      currentCol = (currentCol + 1) % colCount
       left = minCol * (colWidthPct + gapPct)
       itemWidthPct = colWidthPct
     }
 
     // 卡片高度：spread 和单页等高（锁定行对齐）
     // spread 容器宽度虽然包含中间 gap，但高度应等于同列宽下单页的高度
-    const colWidthPx = containerWidth * colWidthPct / 100
     const itemHeight = colWidthPx / singleAspect
     // 虚拟书：底部有来源书名文字行，需额外高度
     const virtualSourceHeight = isVirtualBook.value ? 28 : 0
