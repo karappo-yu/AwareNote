@@ -320,7 +320,7 @@
           <!-- Next arrow: LTR=右侧→, RTL=左侧← -->
           <transition name="viewer-arrow-fade">
             <q-btn
-              v-if="book && viewerPage < book.page_count"
+              v-if="book && endPage < book.page_count"
               class="viewer-nav-arrow"
               :class="[isRtl ? 'viewer-nav-left' : 'viewer-nav-right', { 'arrow-hidden': !arrowsVisible }]"
               round
@@ -996,6 +996,14 @@ const currentViewerSpread = computed<{ pages: [number, number]; direction: 'ltr'
   return null
 })
 
+// 当前屏的结束页码（最大的物理页码），用于判断是否还有下一屏
+const endPage = computed(() => {
+  if (currentViewerSpread.value) {
+    return Math.max(...currentViewerSpread.value.pages)
+  }
+  return viewerPage.value
+})
+
 // 当前查看器页面是否已收藏
 const isCurrentPageFavorited = computed(() => {
   // 虚拟书：所有页面都是已收藏的
@@ -1247,12 +1255,12 @@ function viewerPrev() {
 
 function viewerNext() {
   resetArrowTimer()
-  if (!book.value || viewerPage.value >= book.value.page_count) return
+  if (!book.value || endPage.value >= book.value.page_count) return
   // 如果当前页是 spread 的左页，跳过右页
   const currentFilename = pageNames.value[viewerPage.value - 1]?.filename
   if (currentFilename) {
     const spread = spreads.value.find(s => s.filename === currentFilename)
-    if (spread && viewerPage.value + 1 <= book.value.page_count) {
+    if (spread) {
       viewerPage.value = viewerPage.value + 2
       imgLoaded.value = false
       panOffset.x = 0
