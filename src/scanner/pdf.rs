@@ -332,8 +332,7 @@ fn render_pdf_page_svg(
         width as f32 / raw_width
     };
     let matrix = Matrix::new_scale(scale, scale);
-    let display_list = page.to_display_list(true).map_err(mupdf_to_io_error)?;
-    let svg = display_list.to_svg(&matrix).map_err(mupdf_to_io_error)?;
+    let svg = page.to_svg(&matrix).map_err(mupdf_to_io_error)?;
 
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -372,8 +371,7 @@ fn render_pdf_page_svg_bytes(
         width as f32 / raw_width
     };
     let matrix = Matrix::new_scale(scale, scale);
-    let display_list = page.to_display_list(true).map_err(mupdf_to_io_error)?;
-    let svg = display_list.to_svg(&matrix).map_err(mupdf_to_io_error)?;
+    let svg = page.to_svg(&matrix).map_err(mupdf_to_io_error)?;
     Ok(svg.into_bytes())
 }
 
