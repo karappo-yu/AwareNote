@@ -322,24 +322,8 @@ impl DatabaseService {
             return Ok(false);
         };
 
-        let active_model = book_files::ActiveModel {
-            id: sea_orm::Set(book.id),
-            category_id: sea_orm::Set(book.category_id),
-            path: sea_orm::Set(book.path),
-            title: sea_orm::Set(book.title),
-            kind: sea_orm::Set(book.kind),
-            size: sea_orm::Set(book.size),
-            mtime: sea_orm::Set(book.mtime),
-            page_count: sea_orm::Set(book.page_count),
-            pages_json: sea_orm::Set(book.pages_json),
-            pages_meta_json: sea_orm::Set(book.pages_meta_json),
-            content_signature: sea_orm::Set(book.content_signature),
-            is_oversized: sea_orm::Set(book.is_oversized),
-            avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
-            is_favorite: sea_orm::Set(is_favorite),
-            cover_path: sea_orm::Set(book.cover_path),
-            created_at: sea_orm::Set(book.created_at),
-        };
+        let mut active_model = book_model_to_active_model(&book);
+        active_model.is_favorite = sea_orm::Set(is_favorite);
         active_model.update(&self.db).await?;
         Ok(true)
     }
@@ -725,23 +709,7 @@ impl DatabaseService {
                 let Some(category_id) = category_id else {
                     continue;
                 };
-                let active_model = book_files::ActiveModel {
-                    category_id: sea_orm::Set(category_id),
-                    path: sea_orm::Set(book.path.clone()),
-                    title: sea_orm::Set(book.title.clone()),
-                    kind: sea_orm::Set(book.kind.clone()),
-                    size: sea_orm::Set(book.size),
-                    mtime: sea_orm::Set(book.mtime),
-                    page_count: sea_orm::Set(book.page_count),
-                    pages_json: sea_orm::Set(book.pages_json.clone()),
-                    pages_meta_json: sea_orm::Set(book.pages_meta_json.clone()),
-                    content_signature: sea_orm::Set(book.content_signature.clone()),
-                    is_oversized: sea_orm::Set(book.is_oversized),
-                    avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
-                    is_favorite: sea_orm::Set(false),
-                    cover_path: sea_orm::Set(book.cover_path.clone()),
-                    ..Default::default()
-                };
+                let active_model = scanned_book_to_active_model(category_id, book);
                 active_model.insert(&txn).await?;
                 report.inserted_book_files += 1;
                 report.inserted_book_file_details.push(BookChangeDetail {
@@ -755,25 +723,7 @@ impl DatabaseService {
         // --- 2. 更新フェーズ ---
 
         for updated_book in &diff.updated_book_files {
-            // N+1 クエリを排除：必要な信息都在 diff 结果中
-            let active_model = book_files::ActiveModel {
-                id: sea_orm::Set(updated_book.id),
-                category_id: sea_orm::Set(updated_book.category_id),
-                path: sea_orm::Set(updated_book.path.clone()),
-                title: sea_orm::Set(updated_book.title.clone()),
-                kind: sea_orm::Set(updated_book.kind.clone()),
-                size: sea_orm::Set(updated_book.size),
-                mtime: sea_orm::Set(updated_book.mtime),
-                page_count: sea_orm::Set(updated_book.page_count),
-                pages_json: sea_orm::Set(updated_book.pages_json.clone()),
-                pages_meta_json: sea_orm::Set(updated_book.pages_meta_json.clone()),
-                content_signature: sea_orm::Set(updated_book.content_signature.clone()),
-                is_oversized: sea_orm::Set(updated_book.is_oversized),
-                avg_page_pixels: sea_orm::Set(updated_book.avg_page_pixels),
-                is_favorite: sea_orm::Set(updated_book.is_favorite),
-                cover_path: sea_orm::Set(updated_book.cover_path.clone()),
-                created_at: sea_orm::Set(updated_book.created_at.clone()),
-            };
+            let active_model = update_book_active_model(updated_book);
             active_model.update(&txn).await?;
             report.updated_book_files += 1;
             report.updated_book_file_details.push(BookChangeDetail {
@@ -878,6 +828,55 @@ impl DatabaseService {
             .await
     }
 
+    /// 批量获取多个书籍的所有 spread 标记
+    pub async fn get_spreads_for_books(
+        &self,
+        book_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<page_spreads::Model>>, DbErr> {
+        if book_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let all_spreads = page_spreads::Entity::find()
+            .filter(page_spreads::Column::BookId.is_in(book_ids.iter().map(|s| s.as_str())))
+            .all(&self.db)
+            .await?;
+
+        let mut result: std::collections::HashMap<String, Vec<page_spreads::Model>> =
+            std::collections::HashMap::new();
+        for spread in all_spreads {
+            result
+                .entry(spread.book_id.clone())
+                .or_insert_with(Vec::new)
+                .push(spread);
+        }
+        Ok(result)
+    }
+
+    /// 批量获取多个书籍的所有收藏页面
+    pub async fn get_page_favorites_for_books(
+        &self,
+        book_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, Vec<page_favorites::Model>>, DbErr> {
+        if book_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let all_favorites = page_favorites::Entity::find()
+            .filter(page_favorites::Column::BookId.is_in(book_ids.iter().map(|s| s.as_str())))
+            .order_by_desc(page_favorites::Column::CreatedAt)
+            .all(&self.db)
+            .await?;
+
+        let mut result: std::collections::HashMap<String, Vec<page_favorites::Model>> =
+            std::collections::HashMap::new();
+        for fav in all_favorites {
+            result
+                .entry(fav.book_id.clone())
+                .or_insert_with(Vec::new)
+                .push(fav);
+        }
+        Ok(result)
+    }
+
     /// 创建 spread 标记
     pub async fn create_spread(
         &self,
@@ -923,14 +922,22 @@ impl DatabaseService {
         let all_spreads = page_spreads::Entity::find().all(&self.db).await?;
         let book_id_set: std::collections::HashSet<&str> =
             existing_book_ids.iter().map(|s| s.as_str()).collect();
+        let orphan_spreads: Vec<(String, String)> = all_spreads
+            .iter()
+            .filter(|spread| !book_id_set.contains(spread.book_id.as_str()))
+            .map(|spread| (spread.book_id.clone(), spread.filename.clone()))
+            .collect();
+
+        if orphan_spreads.is_empty() {
+            return Ok(0);
+        }
+
         let mut deleted = 0;
-        for spread in &all_spreads {
-            if !book_id_set.contains(spread.book_id.as_str()) {
-                page_spreads::Entity::delete_by_id((spread.book_id.clone(), spread.filename.clone()))
-                    .exec(&self.db)
-                    .await?;
-                deleted += 1;
-            }
+        for (book_id, filename) in orphan_spreads {
+            let result = page_spreads::Entity::delete_by_id((book_id, filename))
+                .exec(&self.db)
+                .await?;
+            deleted += result.rows_affected as usize;
         }
         Ok(deleted)
     }
@@ -1019,14 +1026,22 @@ impl DatabaseService {
         let all_favs = page_favorites::Entity::find().all(&self.db).await?;
         let book_id_set: std::collections::HashSet<&str> =
             existing_book_ids.iter().map(|s| s.as_str()).collect();
+        let orphan_favs: Vec<(String, String)> = all_favs
+            .iter()
+            .filter(|fav| !book_id_set.contains(fav.book_id.as_str()))
+            .map(|fav| (fav.book_id.clone(), fav.filename.clone()))
+            .collect();
+
+        if orphan_favs.is_empty() {
+            return Ok(0);
+        }
+
         let mut deleted = 0;
-        for fav in &all_favs {
-            if !book_id_set.contains(fav.book_id.as_str()) {
-                page_favorites::Entity::delete_by_id((fav.book_id.clone(), fav.filename.clone()))
-                    .exec(&self.db)
-                    .await?;
-                deleted += 1;
-            }
+        for (book_id, filename) in orphan_favs {
+            let result = page_favorites::Entity::delete_by_id((book_id, filename))
+                .exec(&self.db)
+                .await?;
+            deleted += result.rows_affected as usize;
         }
         Ok(deleted)
     }
@@ -1289,6 +1304,73 @@ fn collect_descendant_category_ids(category_id: i64, categories: &[categories::M
     }
 
     result
+}
+
+fn book_model_to_active_model(book: &book_files::Model) -> book_files::ActiveModel {
+    book_files::ActiveModel {
+        id: sea_orm::Set(book.id),
+        category_id: sea_orm::Set(book.category_id),
+        path: sea_orm::Set(book.path.clone()),
+        title: sea_orm::Set(book.title.clone()),
+        kind: sea_orm::Set(book.kind.clone()),
+        size: sea_orm::Set(book.size),
+        mtime: sea_orm::Set(book.mtime),
+        page_count: sea_orm::Set(book.page_count),
+        pages_json: sea_orm::Set(book.pages_json.clone()),
+        pages_meta_json: sea_orm::Set(book.pages_meta_json.clone()),
+        content_signature: sea_orm::Set(book.content_signature.clone()),
+        is_oversized: sea_orm::Set(book.is_oversized),
+        avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
+        is_favorite: sea_orm::Set(book.is_favorite),
+        cover_path: sea_orm::Set(book.cover_path.clone()),
+        created_at: sea_orm::Set(book.created_at.clone()),
+    }
+}
+
+fn scanned_book_to_active_model(
+    category_id: i64,
+    book: &crate::scanner::types::ScannedBookFile,
+) -> book_files::ActiveModel {
+    book_files::ActiveModel {
+        category_id: sea_orm::Set(category_id),
+        path: sea_orm::Set(book.path.clone()),
+        title: sea_orm::Set(book.title.clone()),
+        kind: sea_orm::Set(book.kind.clone()),
+        size: sea_orm::Set(book.size),
+        mtime: sea_orm::Set(book.mtime),
+        page_count: sea_orm::Set(book.page_count),
+        pages_json: sea_orm::Set(book.pages_json.clone()),
+        pages_meta_json: sea_orm::Set(book.pages_meta_json.clone()),
+        content_signature: sea_orm::Set(book.content_signature.clone()),
+        is_oversized: sea_orm::Set(book.is_oversized),
+        avg_page_pixels: sea_orm::Set(book.avg_page_pixels),
+        is_favorite: sea_orm::Set(false),
+        cover_path: sea_orm::Set(book.cover_path.clone()),
+        ..Default::default()
+    }
+}
+
+fn update_book_active_model(
+    updated_book: &book_files::Model,
+) -> book_files::ActiveModel {
+    book_files::ActiveModel {
+        id: sea_orm::Set(updated_book.id),
+        category_id: sea_orm::Set(updated_book.category_id),
+        path: sea_orm::Set(updated_book.path.clone()),
+        title: sea_orm::Set(updated_book.title.clone()),
+        kind: sea_orm::Set(updated_book.kind.clone()),
+        size: sea_orm::Set(updated_book.size),
+        mtime: sea_orm::Set(updated_book.mtime),
+        page_count: sea_orm::Set(updated_book.page_count),
+        pages_json: sea_orm::Set(updated_book.pages_json.clone()),
+        pages_meta_json: sea_orm::Set(updated_book.pages_meta_json.clone()),
+        content_signature: sea_orm::Set(updated_book.content_signature.clone()),
+        is_oversized: sea_orm::Set(updated_book.is_oversized),
+        avg_page_pixels: sea_orm::Set(updated_book.avg_page_pixels),
+        is_favorite: sea_orm::Set(updated_book.is_favorite),
+        cover_path: sea_orm::Set(updated_book.cover_path.clone()),
+        created_at: sea_orm::Set(updated_book.created_at.clone()),
+    }
 }
 
 #[cfg(test)]

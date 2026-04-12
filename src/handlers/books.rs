@@ -651,28 +651,48 @@ pub async fn list_all_page_favorites(
 ) -> Result<Json<AllPageFavoritesResponse>, AppError> {
     let favorites = state.db_service.get_all_page_favorites().await?;
 
-    // 预加载所有涉及书籍的 spreads，避免逐条查询
-    let mut book_spreads: std::collections::HashMap<String, Vec<page_spreads::Model>> = std::collections::HashMap::new();
-    for fav in &favorites {
-        if !book_spreads.contains_key(&fav.book_id) {
-            match state.db_service.get_spreads(&fav.book_id).await {
-                Ok(spreads) => {
-                    tracing::info!("[page-favorites] Loaded {} spreads for book {}", spreads.len(), fav.book_id);
-                    book_spreads.insert(fav.book_id.clone(), spreads);
-                }
-                Err(e) => {
-                    tracing::warn!("[page-favorites] Failed to load spreads for book {}: {}", fav.book_id, e);
+    let unique_book_ids: Vec<String> = favorites
+        .iter()
+        .map(|f| f.book_id.clone())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let book_spreads = state
+        .db_service
+        .get_spreads_for_books(&unique_book_ids)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("[page-favorites] Failed to load spreads: {}", e);
+            std::collections::HashMap::new()
+        });
+
+    let all_books = if unique_book_ids.len() <= 100 {
+        let mut books = Vec::new();
+        for book_id_str in &unique_book_ids {
+            if let Ok(book_id) = book_id_str.parse::<i64>() {
+                if let Ok(Some(book)) = state.db_service.get_book(book_id).await {
+                    books.push(book);
                 }
             }
         }
-    }
+        books
+    } else {
+        let all_books_result = state.db_service.list_all_books(true).await?;
+        all_books_result
+            .into_iter()
+            .filter(|b| unique_book_ids.contains(&b.id.to_string()))
+            .collect()
+    };
+
+    let books_by_id: std::collections::HashMap<String, _> = all_books
+        .into_iter()
+        .map(|b| (b.id.to_string(), b))
+        .collect();
 
     let mut pages = Vec::new();
     for fav in &favorites {
-        // 查找书籍信息
-        let book_id: i64 = fav.book_id.parse().unwrap_or(0);
-        if let Some(book) = state.db_service.get_book(book_id).await? {
-            // 从 pages_meta_json 中获取页面尺寸
+        if let Some(book) = books_by_id.get(&fav.book_id) {
             let meta: Vec<crate::scanner::strategy::PageMeta> = book
                 .pages_meta_json
                 .as_deref()
@@ -680,11 +700,9 @@ pub async fn list_all_page_favorites(
                 .unwrap_or_default();
 
             let (w, h) = if book.kind == "pdf" {
-                // PDF: filename 是页码序号
                 let page_idx: usize = fav.filename.parse::<usize>().unwrap_or(1).saturating_sub(1);
                 meta.get(page_idx).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None))
             } else {
-                // image_book: filename 是文件名，需要在 pages_json 中找到索引
                 let page_paths: Vec<String> = serde_json::from_str(book.pages_json.as_deref().unwrap_or("[]"))
                     .unwrap_or_default();
                 let idx = page_paths.iter().position(|p| {
@@ -696,15 +714,9 @@ pub async fn list_all_page_favorites(
                 meta.get(idx).map(|m| (Some(m.w), Some(m.h))).unwrap_or((None, None))
             };
 
-            // 查找该页是否是 spread 的左页
             let spread_info = book_spreads
                 .get(&fav.book_id)
-                .and_then(|spreads| {
-                    let found = spreads.iter()
-                        .find(|s| s.filename == fav.filename);
-                    tracing::info!("[page-favorites] Looking for spread: book={} filename={} found={} ({} spreads available)", fav.book_id, fav.filename, found.is_some(), spreads.len());
-                    found
-                });
+                .and_then(|spreads| spreads.iter().find(|s| s.filename == fav.filename));
             let next_file = spread_info.map(|s| s.next_file.clone());
             let direction = spread_info.map(|s| s.direction.clone());
 
