@@ -2,7 +2,7 @@
   <q-layout view="hHh lPr fFf">
     <!-- Top bar — auto-hide in masonry mode -->
     <q-header
-      class="reader-bar"
+      class="gallery-header"
       :class="{
         'header-hidden': thumbViewMode === 'masonry' && masonryHeaderHidden,
         'masonry-header-float': thumbViewMode === 'masonry'
@@ -87,7 +87,7 @@
           flat round dense
           icon="keyboard_hide"
           size="sm"
-          @click="masonryHeaderHidden = true"
+          @click="setMasonryHeaderHidden(true)"
         >
           <q-tooltip>隐藏顶栏</q-tooltip>
         </q-btn>
@@ -103,7 +103,7 @@
         flat
         icon="keyboard_arrow_down"
         size="sm"
-        @click="masonryHeaderHidden = false"
+        @click="setMasonryHeaderHidden(false)"
       >
         <q-tooltip>显示顶栏</q-tooltip>
       </q-btn>
@@ -771,8 +771,26 @@ const pageFavorites = ref<PageFavoriteInfo[]>([])  // 页面收藏列表
 const favoritePageSources = ref<FavoritePageItem[]>([])  // 虚拟书来源信息
 const loading = ref(true)
 const infoDrawer = ref(false)
-/** 瀑布流顶栏是否被手动隐藏（默认显示，按钮控制） */
-const masonryHeaderHidden = ref(false)
+/** 瀑布流顶栏是否被手动隐藏（默认显示，按钮控制）。
+ *  状态持久化到 localStorage：刷新、切书、重开窗口后都保持上次的隐藏/显示状态。 */
+const MASONRY_HEADER_HIDDEN_KEY = 'masonryHeaderHidden'
+const masonryHeaderHidden = ref(
+  (LocalStorage.getItem<boolean>(MASONRY_HEADER_HIDDEN_KEY) ?? false)
+)
+
+function setMasonryHeaderHidden(v: boolean) {
+  masonryHeaderHidden.value = v
+  LocalStorage.set(MASONRY_HEADER_HIDDEN_KEY, v)
+}
+
+// 多窗口/标签页实时同步：别的窗口点了显示或隐藏，本窗口立即跟随
+function onMasonryHeaderStorage(e: StorageEvent) {
+  if (e.key === MASONRY_HEADER_HIDDEN_KEY) {
+    masonryHeaderHidden.value = e.newValue === null ? false : e.newValue === 'true'
+  }
+}
+window.addEventListener('storage', onMasonryHeaderStorage)
+onBeforeUnmount(() => window.removeEventListener('storage', onMasonryHeaderStorage))
 const isVirtualBook = computed(() => bookId.value === '__page_favorites__')
 const readingDirection = ref<'ltr' | 'rtl'>('ltr')
 const isRtl = computed(() => readingDirection.value === 'rtl')
@@ -917,10 +935,13 @@ const thumbPage = ref(1)
 // View mode
 const thumbViewMode = ref<'grid' | 'masonry'>('masonry')
 
-// 切回网格模式时恢复顶栏（网格顶栏不悬浮、始终显示）
+// 切回网格模式时恢复顶栏（网格顶栏不悬浮、必须始终显示，但不改动保存的瀑布流偏好）
 watch(thumbViewMode, (val) => {
   if (val !== 'masonry') {
     masonryHeaderHidden.value = false
+  } else {
+    // 回到瀑布流：恢复用户上次保存的隐藏/显示偏好
+    masonryHeaderHidden.value = LocalStorage.getItem<boolean>(MASONRY_HEADER_HIDDEN_KEY) ?? false
   }
 })
 
