@@ -4,7 +4,7 @@
     <q-header
       class="reader-bar"
       :class="{
-        'header-hidden': thumbViewMode === 'masonry' && !headerHover,
+        'header-hidden': thumbViewMode === 'masonry' && masonryHeaderHidden,
         'masonry-header-float': thumbViewMode === 'masonry'
       }"
     >
@@ -81,8 +81,33 @@
         <q-btn flat round dense icon="home" size="sm" @click="$router.push({ name: 'gallery' })">
           <q-tooltip>返回首页</q-tooltip>
         </q-btn>
+        <!-- 隐藏顶栏（仅瀑布流模式，顶栏默认显示） -->
+        <q-btn
+          v-if="thumbViewMode === 'masonry'"
+          flat round dense
+          icon="keyboard_hide"
+          size="sm"
+          @click="masonryHeaderHidden = true"
+        >
+          <q-tooltip>隐藏顶栏</q-tooltip>
+        </q-btn>
       </q-toolbar>
     </q-header>
+
+    <!-- 瀑布流：顶栏隐藏后的恢复按钮 -->
+    <transition name="viewer-arrow-fade">
+      <q-btn
+        v-if="thumbViewMode === 'masonry' && masonryHeaderHidden"
+        class="masonry-header-restore"
+        round
+        flat
+        icon="keyboard_arrow_down"
+        size="sm"
+        @click="masonryHeaderHidden = false"
+      >
+        <q-tooltip>显示顶栏</q-tooltip>
+      </q-btn>
+    </transition>
 
     <!-- Content -->
     <q-page-container>
@@ -150,6 +175,15 @@
                           class="page-fav-badge page-fav-badge-hover"
                           @click.stop="toggleGridPageFavorite(page, $event)"
                         />
+                        <!-- 涂鸦角标 -->
+                        <q-icon
+                          v-if="pageHasDoodle(page)"
+                          name="draw"
+                          size="14px"
+                          class="page-doodle-badge"
+                        >
+                          <q-tooltip>此页有涂鸦标记</q-tooltip>
+                        </q-icon>
                       </template>
                     </q-img>
                   </q-card>
@@ -208,6 +242,15 @@
                           class="page-fav-badge page-fav-badge-hover"
                           @click.stop="togglePageFavoriteFromMasonry(item, $event)"
                         />
+                        <!-- 涂鸦角标（仅单页） -->
+                        <q-icon
+                          v-if="!item.isSpread && pageHasDoodle(item.page || 0)"
+                          name="draw"
+                          size="14px"
+                          class="page-doodle-badge"
+                        >
+                          <q-tooltip>此页有涂鸦标记</q-tooltip>
+                        </q-icon>
                       </template>
                       <!-- Spread: two images side by side (RTL: reversed visual order) -->
                       <div v-if="item.isSpread" class="masonry-spread-container" :style="{ direction: item.direction === 'rtl' ? 'rtl' : 'ltr' }">
@@ -280,7 +323,7 @@
     >
       <div
         class="viewer-container column no-wrap"
-        @click.self="closeViewer()"
+        @click.self="onViewerBgClick"
       >
         <!-- Top bar — minimal overlay -->
         <div class="viewer-topbar row items-center q-px-md" @click.stop>
@@ -288,24 +331,24 @@
           <q-space />
           <span class="viewer-page-counter">{{ currentViewerSpread ? currentViewerSpread.pages[0] + '-' + currentViewerSpread.pages[1] : viewerPage }} / {{ book?.page_count }}</span>
           <q-space />
-          <q-btn flat round dense icon="add" color="white" size="sm" class="viewer-tool-btn" @click="viewerZoom(0.3)" />
-          <q-btn flat round dense icon="remove" color="white" size="sm" class="viewer-tool-btn" :class="{ 'opacity-disabled': viewerState.zoom <= 0.5 }" @click="viewerZoom(-0.3)" />
-          <q-btn flat round dense icon="restart_alt" color="white" size="sm" class="viewer-tool-btn" @click="viewerReset" />
+          <q-btn flat round dense icon="add" color="white" size="sm" class="viewer-tool-btn" :disable="doodleMode" @click="viewerZoom(0.3)" />
+          <q-btn flat round dense icon="remove" color="white" size="sm" class="viewer-tool-btn" :class="{ 'opacity-disabled': viewerState.zoom <= 0.5 }" :disable="doodleMode" @click="viewerZoom(-0.3)" />
+          <q-btn flat round dense icon="restart_alt" color="white" size="sm" class="viewer-tool-btn" :disable="doodleMode" @click="viewerReset" />
           <q-separator vertical color="white" class="q-mx-sm" style="opacity: 0.15; height: 20px" />
-          <q-btn flat round dense icon="rotate_right" color="white" size="sm" class="viewer-tool-btn" @click="viewerRotate" />
+          <q-btn flat round dense icon="rotate_right" color="white" size="sm" class="viewer-tool-btn" :disable="doodleMode" @click="viewerRotate" />
         </div>
 
-        <!-- Main area: image + nav arrows — click background to close -->
+        <!-- Main area: image + nav arrows — click background to close (disabled in doodle mode) -->
         <div
           class="col row relative-position"
           style="overflow: hidden"
-          @click="closeViewer()"
+          @click="onViewerBgClick"
           @wheel.prevent="handleWheel"
         >
           <!-- Prev arrow: LTR=左侧←, RTL=右侧→ -->
           <transition name="viewer-arrow-fade">
             <q-btn
-              v-if="viewerPage > 1"
+              v-if="viewerPage > 1 && !doodleMode"
               class="viewer-nav-arrow"
               :class="[isRtl ? 'viewer-nav-right' : 'viewer-nav-left', { 'arrow-hidden': !arrowsVisible }]"
               round
@@ -320,7 +363,7 @@
           <!-- Next arrow: LTR=右侧→, RTL=左侧← -->
           <transition name="viewer-arrow-fade">
             <q-btn
-              v-if="book && endPage < book.page_count"
+              v-if="book && endPage < book.page_count && !doodleMode"
               class="viewer-nav-arrow"
               :class="[isRtl ? 'viewer-nav-left' : 'viewer-nav-right', { 'arrow-hidden': !arrowsVisible }]"
               round
@@ -332,11 +375,11 @@
             />
           </transition>
 
-          <!-- Image container — click background to close -->
+          <!-- Image container — click background to close (disabled in doodle mode) -->
           <div
             class="col row items-center justify-center relative-position"
             style="min-height: 0"
-            @click="closeViewer()"
+            @click="onViewerBgClick"
           >
             <!-- Spread: two images side by side (RTL: reversed order) -->
             <div v-if="currentViewerSpread" class="viewer-spread-container"
@@ -373,26 +416,172 @@
                 @mouseleave="endDrag"
               />
             </div>
-            <!-- Normal single page -->
-            <img
-              v-else
-              :src="getPageUrl(viewerPage, book?.optimization_strategy === 2)"
-              :style="viewerImgStyle"
-              class="viewer-image"
-              :class="{ 
-                'viewer-image-grab': !isDragging, 
-                'viewer-image-grabbing': isDragging,
-                'viewer-image-svg': book && bookFormat(book.type) === 'pdf'
-              }"
-              draggable="false"
-              @load="imgLoaded = true"
-              @click.stop
-              @mousedown.stop="startDrag"
-              @mousemove.stop="onDrag"
-              @mouseup.stop="endDrag"
-              @mouseleave="endDrag"
-            />
+            <!-- Normal single page (wrapped for doodle canvas overlay) -->
+            <div v-else class="doodle-img-wrap" :class="{ 'doodle-img-wrap--expanded': doodleMode }">
+              <!-- 垫底壳：勾线模式下显示棋盘格，让降透明度的草稿有衬底 -->
+              <div class="doodle-img-shell" :class="{ 'doodle-img-shell--draft': doodleMode && doodleImgOpacity < 0.999 }">
+                <img
+                  ref="viewerImgEl"
+                  :src="getPageUrl(viewerPage, book?.optimization_strategy === 2)"
+                  :style="viewerImageStyle"
+                  class="viewer-image"
+                  :class="{
+                    'viewer-image-grab': !isDragging,
+                    'viewer-image-grabbing': isDragging,
+                    'viewer-image-svg': book && bookFormat(book.type) === 'pdf'
+                  }"
+                  draggable="false"
+                  @load="imgLoaded = true"
+                  @click.stop
+                  @mousedown.stop="startDrag"
+                  @mousemove.stop="onDrag"
+                  @mouseup.stop="endDrag"
+                  @mouseleave="endDrag"
+                />
+              </div>
+              <!-- 涂鸦画布：覆盖整个主区域，笔迹坐标锚定图片（可涂出图片外） -->
+              <DoodleCanvas
+                v-if="doodleMode"
+                :strokes="doodleStrokes"
+                :tool="doodleTool"
+                :color="doodleColor"
+                :width="doodleSize"
+                :anchor-el="viewerImgEl"
+                @stroke-end="onDoodleStrokeEnd"
+              />
+            </div>
           </div>
+
+          <!-- 涂鸦工具栏（悬浮在底栏上方） -->
+          <transition name="doodle-bar-fade">
+            <div v-if="doodleMode" class="doodle-toolbar row items-center q-px-sm q-py-xs" @click.stop @pointerdown.stop>
+              <!-- 画笔 / 橡皮 -->
+              <q-btn-toggle
+                v-model="doodleTool"
+                no-caps dense flat
+                toggle-color="brand"
+                :options="[
+                  { value: 'pen', slot: 'tool-pen' },
+                  { value: 'eraser', slot: 'tool-eraser' }
+                ]"
+              >
+                <template v-slot:tool-pen>
+                  <q-icon name="edit" size="18px" />
+                  <q-tooltip>画笔</q-tooltip>
+                </template>
+                <template v-slot:tool-eraser>
+                  <!-- 内联 SVG 橡皮擦图标（Material Icons 经典字体无此字形，用字体名会渲染成空白） -->
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                    <path d="M22 21H7" />
+                    <path d="m5 11 9 9" />
+                  </svg>
+                  <q-tooltip>橡皮擦（像素擦除）</q-tooltip>
+                </template>
+              </q-btn-toggle>
+
+              <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
+
+              <!-- 颜色 -->
+              <span
+                v-for="c in DOODLE_COLORS"
+                :key="c"
+                class="doodle-color-dot"
+                :class="{ 'doodle-color-dot--active': doodleColor === c && doodleTool === 'pen' }"
+                :style="{ background: c }"
+                @click="selectDoodleColor(c)"
+              >
+                <q-tooltip>{{ doodleColorNames[c] }}</q-tooltip>
+              </span>
+
+              <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
+
+              <!-- 粗细（画笔宽度 / 橡皮擦直径） -->
+              <q-btn
+                flat dense no-caps
+                size="sm"
+                color="white"
+                class="doodle-width-btn"
+                @click.stop
+              >
+                <svg v-if="doodleTool === 'pen'" width="24" height="14" viewBox="0 0 24 14">
+                  <line x1="3" y1="7" x2="21" y2="7" :stroke="doodleColor" :stroke-width="penWidth" stroke-linecap="round" />
+                </svg>
+                <svg v-else width="24" height="14" viewBox="0 0 24 14">
+                  <circle cx="12" cy="7" :r="Math.min(6, eraserWidth / 4)" fill="none" stroke="white" stroke-width="1.5" stroke-dasharray="3 2" />
+                </svg>
+                <q-popup-proxy cover transition-show="jump-down" transition-hide="jump-up">
+                  <div class="q-pa-md col-popup">
+                    <div class="text-caption text-grey-5 q-mb-xs">{{ doodleTool === 'pen' ? '画笔粗细' : '橡皮擦大小' }}</div>
+                    <q-slider
+                      v-model="doodleSize"
+                      :min="doodleTool === 'pen' ? 1 : 4"
+                      :max="doodleTool === 'pen' ? 12 : 60"
+                      :step="1"
+                      label
+                      label-always
+                      color="brand"
+                      thumb-color="brand"
+                      class="col-slider"
+                    />
+                  </div>
+                </q-popup-proxy>
+                <q-tooltip>{{ doodleTool === 'pen' ? '画笔粗细' : '橡皮擦大小' }}</q-tooltip>
+              </q-btn>
+
+              <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
+
+              <!-- 参考图透明度（降低草稿透明度勾线） -->
+              <q-btn
+                flat dense no-caps
+                size="sm"
+                color="white"
+                class="doodle-width-btn"
+                @click.stop
+              >
+                <q-icon name="opacity" size="17px" />
+                <span class="text-caption q-ml-xs" style="opacity: 0.9">{{ Math.round(doodleImgOpacity * 100) }}%</span>
+                <q-popup-proxy cover transition-show="jump-down" transition-hide="jump-up">
+                  <div class="q-pa-md col-popup" style="min-width: 190px">
+                    <div class="text-caption text-grey-5 q-mb-xs">参考图透明度</div>
+                    <q-slider
+                      v-model="doodleImgOpacity"
+                      :min="0.05"
+                      :max="1"
+                      :step="0.05"
+                      label
+                      :label-value="Math.round(doodleImgOpacity * 100) + '%'"
+                      label-always
+                      color="brand"
+                      thumb-color="brand"
+                      class="col-slider"
+                    />
+                  </div>
+                </q-popup-proxy>
+                <q-tooltip>参考图透明度（调低草稿方便勾线）</q-tooltip>
+              </q-btn>
+
+              <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
+
+              <!-- 撤销 / 重做 / 清空 -->
+              <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="undo" :disable="doodleStrokes.length === 0" @click="doodleUndo">
+                <q-tooltip>撤销</q-tooltip>
+              </q-btn>
+              <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="redo" :disable="doodleRedoStack.length === 0" @click="doodleRedo">
+                <q-tooltip>重做</q-tooltip>
+              </q-btn>
+              <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="delete_sweep" :disable="doodleStrokes.length === 0" @click="confirmDoodleClear">
+                <q-tooltip>清空涂鸦</q-tooltip>
+              </q-btn>
+
+              <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
+
+              <!-- 完成 -->
+              <q-btn flat round dense color="brand" size="sm" class="viewer-tool-btn" icon="check_circle" @click="toggleDoodleMode">
+                <q-tooltip>完成涂鸦</q-tooltip>
+              </q-btn>
+            </div>
+          </transition>
 
           <q-inner-loading :showing="!imgLoaded" dark style="background: transparent">
             <q-spinner-dots size="48px" color="white" />
@@ -403,7 +592,21 @@
         <div class="viewer-bottombar q-py-sm q-px-md" @click.stop>
           <div class="row items-center justify-between">
             <div class="row q-gutter-xs">
-              <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="flip" @click="viewerFlip" />
+              <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="flip" :disable="doodleMode" @click="viewerFlip" />
+              <!-- 涂鸦模式开关 -->
+              <q-btn
+                flat round dense
+                :icon="doodleMode ? 'draw' : 'gesture'"
+                :color="doodleMode ? 'brand' : 'white'"
+                size="sm"
+                class="viewer-tool-btn"
+                :disable="isVirtualBook || !!currentViewerSpread || !imgLoaded"
+                @click="toggleDoodleMode"
+              >
+                <q-tooltip>
+                  {{ isVirtualBook ? '收藏虚拟书暂不支持涂鸦' : currentViewerSpread ? '拼接页暂不支持涂鸦' : !imgLoaded ? '图片加载中...' : (doodleMode ? '退出涂鸦模式' : '涂鸦模式') }}
+                </q-tooltip>
+              </q-btn>
               <q-btn
                 flat round dense
                 :icon="isCurrentPageFavorited ? 'favorite' : 'favorite_border'"
@@ -415,12 +618,12 @@
                 <q-tooltip>{{ isCurrentPageFavorited ? '取消收藏此页' : '收藏此页' }}</q-tooltip>
               </q-btn>
               <!-- Spread buttons -->
-              <template v-if="canCreateSpreadNext">
+              <template v-if="canCreateSpreadNext && !doodleMode">
                 <q-btn flat round dense color="white" size="sm" class="viewer-tool-btn" icon="join_inner" @click.stop="handleCreateSpreadNext">
                   <q-tooltip>拼下一页</q-tooltip>
                 </q-btn>
               </template>
-              <template v-if="currentViewerSpread">
+              <template v-if="currentViewerSpread && !doodleMode">
                 <q-btn flat round dense color="red-4" size="sm" class="viewer-tool-btn" icon="call_split" @click.stop="handleDeleteSpread">
                   <q-tooltip>取消拼接</q-tooltip>
                 </q-btn>
@@ -553,6 +756,8 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, reactive, nextTick } 
 import { Dark, LocalStorage, useQuasar } from 'quasar'
 import { getBook, getBookPages, getSpreads, createSpread, deleteSpread, toggleFavorite, revealInFinder, coverUrl as coverUrlFn, pdfPageSvgUrl, imagePageByNameUrl, bookFormat, type BookDetail, type PageInfo, type SpreadInfo, getPageFavorites, createPageFavorite, deletePageFavorite, type PageFavoriteInfo, getAllPageFavorites, type FavoritePageItem, getBookSettings, updateBookSettings } from '../api'
 import { useSettings } from '../stores/settings'
+import DoodleCanvas from '../components/DoodleCanvas.vue'
+import type { DoodleStroke } from '../components/DoodleCanvas.vue'
 
 const props = defineProps<{ id: string }>()
 const bookId = computed(() => props.id)
@@ -566,11 +771,11 @@ const pageFavorites = ref<PageFavoriteInfo[]>([])  // 页面收藏列表
 const favoritePageSources = ref<FavoritePageItem[]>([])  // 虚拟书来源信息
 const loading = ref(true)
 const infoDrawer = ref(false)
-const headerHover = ref(false)
+/** 瀑布流顶栏是否被手动隐藏（默认显示，按钮控制） */
+const masonryHeaderHidden = ref(false)
 const isVirtualBook = computed(() => bookId.value === '__page_favorites__')
 const readingDirection = ref<'ltr' | 'rtl'>('ltr')
 const isRtl = computed(() => readingDirection.value === 'rtl')
-let headerHideTimer: ReturnType<typeof setTimeout> | null = null
 
 // ============== 虚拟页面列表 ==============
 // 将 pages + spreads 合并为虚拟列表，spread 页合并为一个项
@@ -712,12 +917,10 @@ const thumbPage = ref(1)
 // View mode
 const thumbViewMode = ref<'grid' | 'masonry'>('masonry')
 
-// 切换视图模式时立即显示顶栏
+// 切回网格模式时恢复顶栏（网格顶栏不悬浮、始终显示）
 watch(thumbViewMode, (val) => {
-  if (val === 'masonry') {
-    headerHover.value = true
-    if (headerHideTimer) clearTimeout(headerHideTimer)
-    headerHideTimer = setTimeout(() => { headerHover.value = false }, 3000)
+  if (val !== 'masonry') {
+    masonryHeaderHidden.value = false
   }
 })
 
@@ -998,6 +1201,222 @@ const viewerPage = ref(1)
 const viewerState = reactive({ zoom: 1, rotation: 0, flipH: false })
 const imgLoaded = ref(true) // template ref
 
+// ============== 涂鸦模式 (Doodle mode) ==============
+// 笔画数据以 `doodle:<filename>` 为 key 存到 per-book user_data，非侵入、不动原文件
+const DOODLE_KEY_PREFIX = 'doodle:'
+const DOODLE_COLORS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#32ade6', '#af52de'] as const
+const doodleColorNames: Record<string, string> = {
+  '#ff3b30': '红色',
+  '#ff9500': '橙色',
+  '#ffcc00': '黄色',
+  '#34c759': '绿色',
+  '#32ade6': '蓝色',
+  '#af52de': '紫色',
+}
+const doodleMode = ref(false)
+const doodleTool = ref<'pen' | 'eraser'>('pen')
+const doodleColor = ref<string>(DOODLE_COLORS[0])
+/** 画笔粗细（px） */
+const penWidth = ref(4)
+/** 橡皮擦直径（px） */
+const eraserWidth = ref(20)
+/** 参考图透明度（涂鸦模式下生效，勾线时调低草稿） */
+const doodleImgOpacity = ref(1)
+/** 查看器单页图片元素（涂鸦坐标锚点） */
+const viewerImgEl = ref<HTMLImageElement | null>(null)
+/** 当前工具的粗细（工具栏滑块绑定） */
+const doodleSize = computed({
+  get: () => (doodleTool.value === 'pen' ? penWidth.value : eraserWidth.value),
+  set: (v: number) => {
+    if (doodleTool.value === 'pen') penWidth.value = v
+    else eraserWidth.value = v
+  },
+})
+/** 当前页的笔画列表（编辑中） */
+const doodleStrokes = ref<DoodleStroke[]>([])
+/** 重做栈：撤销时弹出的笔画 */
+const doodleRedoStack = ref<DoodleStroke[]>([])
+/** 全书涂鸦缓存：filename → strokes（含已保存 + 编辑中的当前页） */
+const doodlesByFile = reactive<Record<string, DoodleStroke[]>>({})
+let doodleSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+const currentDoodleFilename = computed(() => pageNames.value[viewerPage.value - 1]?.filename ?? null)
+
+function parseDoodleValue(raw: string | undefined | null): DoodleStroke[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && Array.isArray(parsed.strokes)) {
+      // 兼容旧数据：tool 字段缺失视为画笔
+      return (parsed.strokes as DoodleStroke[]).map(s => ({
+        ...s,
+        tool: s.tool ?? 'pen',
+      }))
+    }
+  } catch { /* 忽略损坏数据 */ }
+  return []
+}
+
+/** 从 per-book settings 中解析所有涂鸦数据 */
+function loadDoodlesFromSettings(items: { key: string; value: string }[]) {
+  // 先清空旧数据保持响应式
+  for (const k of Object.keys(doodlesByFile)) delete doodlesByFile[k]
+  for (const item of items) {
+    if (!item.key.startsWith(DOODLE_KEY_PREFIX)) continue
+    const filename = item.key.slice(DOODLE_KEY_PREFIX.length)
+    const strokes = parseDoodleValue(item.value)
+    if (strokes.length > 0) doodlesByFile[filename] = strokes
+  }
+}
+
+function pageHasDoodle(page: number): boolean {
+  const fn = pageNames.value[page - 1]?.filename
+  if (!fn) return false
+  return (doodlesByFile[fn]?.length ?? 0) > 0
+}
+
+function selectDoodleColor(c: string) {
+  doodleColor.value = c
+  doodleTool.value = 'pen'
+}
+
+function toggleDoodleMode() {
+  if (isVirtualBook.value || currentViewerSpread.value) {
+    $q.notify({
+      type: 'info',
+      message: isVirtualBook.value ? '收藏虚拟书暂不支持涂鸦' : '拼接页暂不支持涂鸦，请先取消拼接',
+    })
+    return
+  }
+  if (!doodleMode.value) {
+    // 进入涂鸦：复位视图变换，加载当前页笔画
+    viewerState.zoom = 1
+    viewerState.rotation = 0
+    viewerState.flipH = false
+    panOffset.x = 0
+    panOffset.y = 0
+    doodleStrokes.value = [...(doodlesByFile[currentDoodleFilename.value ?? ''] ?? [])]
+    doodleRedoStack.value = []
+    arrowsVisible.value = false
+    doodleMode.value = true
+  } else {
+    // 退出涂鸦：立即保存
+    exitDoodleMode()
+  }
+}
+
+function exitDoodleMode() {
+  flushDoodleSave()
+  doodleMode.value = false
+}
+
+/** 防抖自动保存 */
+function scheduleDoodleSave() {
+  if (!doodleMode.value) return
+  if (doodleSaveTimer) clearTimeout(doodleSaveTimer)
+  doodleSaveTimer = setTimeout(() => flushDoodleSave(), 800)
+}
+
+async function flushDoodleSave() {
+  if (doodleSaveTimer) { clearTimeout(doodleSaveTimer); doodleSaveTimer = null }
+  await saveDoodleFor(currentDoodleFilename.value, doodleStrokes.value)
+}
+
+async function saveDoodleFor(filename: string | null, strokes: DoodleStroke[]) {
+  if (!filename || isVirtualBook.value) return
+  doodlesByFile[filename] = [...strokes]
+  try {
+    await updateBookSettings(bookId.value, [{
+      key: DOODLE_KEY_PREFIX + filename,
+      value: JSON.stringify({ version: 1, strokes }),
+    }])
+  } catch {
+    console.warn('Failed to save doodle for page:', filename)
+  }
+}
+
+// ============== 参考图透明度（勾线辅助） ==============
+const DOODLE_OPACITY_KEY = 'doodle_image_opacity'
+let opacitySaveTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 从 per-book settings 解析透明度（缺省为 1） */
+function loadOpacityFromSettings(items: { key: string; value: string }[]) {
+  const item = items.find(s => s.key === DOODLE_OPACITY_KEY)
+  if (!item) {
+    doodleImgOpacity.value = 1
+    return
+  }
+  const v = parseFloat(item.value)
+  doodleImgOpacity.value = isNaN(v) ? 1 : Math.min(1, Math.max(0.05, v))
+}
+
+function scheduleOpacitySave() {
+  if (!doodleMode.value) return
+  if (opacitySaveTimer) clearTimeout(opacitySaveTimer)
+  opacitySaveTimer = setTimeout(async () => {
+    opacitySaveTimer = null
+    if (isVirtualBook.value) return
+    try {
+      await updateBookSettings(bookId.value, [{
+        key: DOODLE_OPACITY_KEY,
+        value: String(doodleImgOpacity.value),
+      }])
+    } catch {
+      console.warn('Failed to save image opacity')
+    }
+  }, 600)
+}
+
+watch(doodleImgOpacity, () => scheduleOpacitySave())
+
+
+// DoodleCanvas 回调（画笔与橡皮擦统一：橡皮擦也是一条 eraser 笔画）
+function onDoodleStrokeEnd(stroke: DoodleStroke) {
+  doodleStrokes.value.push(stroke)
+  doodleRedoStack.value = []
+  scheduleDoodleSave()
+}
+
+function doodleUndo() {
+  const stroke = doodleStrokes.value.pop()
+  if (!stroke) return
+  doodleRedoStack.value.push(stroke)
+  scheduleDoodleSave()
+}
+
+function doodleRedo() {
+  const stroke = doodleRedoStack.value.pop()
+  if (!stroke) return
+  doodleStrokes.value.push(stroke)
+  scheduleDoodleSave()
+}
+
+function confirmDoodleClear() {
+  $q.dialog({
+    title: '清空涂鸦',
+    message: '确定要清除本页的所有涂鸦标记吗？',
+    cancel: true,
+    persistent: false,
+  }).onOk(() => {
+    if (doodleStrokes.value.length === 0) return
+    doodleStrokes.value = []
+    doodleRedoStack.value = []
+    scheduleDoodleSave()
+  })
+}
+
+// 翻页时：保存上一页涂鸦，加载新页涂鸦
+watch(viewerPage, (_newPage, oldPage) => {
+  if (!doodleMode.value) return
+  const oldFn = pageNames.value[oldPage - 1]?.filename ?? null
+  if (oldFn && oldFn !== currentDoodleFilename.value) {
+    void saveDoodleFor(oldFn, doodleStrokes.value)
+  }
+  doodleStrokes.value = [...(doodlesByFile[currentDoodleFilename.value ?? ''] ?? [])]
+  doodleRedoStack.value = []
+})
+
+
 // 当前查看器页面是否是 spread 的一部分
 const currentViewerSpread = computed<{ pages: [number, number]; direction: 'ltr' | 'rtl' } | null>(() => {
   const p = viewerPage.value
@@ -1223,7 +1642,21 @@ const viewerImgStyle = computed(() => {
   }
 })
 
+/**
+ * 查看器图片样式：涂鸦模式下应用参考图透明度
+ * （棋盘格衬底由外层 .doodle-img-shell--draft 提供，草稿向白色淡出）
+ */
+const viewerImageStyle = computed(() => {
+  if (!doodleMode.value || doodleImgOpacity.value >= 0.999) return viewerImgStyle.value
+  return {
+    ...viewerImgStyle.value,
+    opacity: String(doodleImgOpacity.value),
+  }
+})
+
 function openViewer(page: number) {
+  // 防御：确保涂鸦模式已退出（正常路径下 closeViewer 已处理）
+  if (doodleMode.value) doodleMode.value = false
   viewerPage.value = page
   viewerState.zoom = 1
   viewerState.rotation = 0
@@ -1236,7 +1669,15 @@ function openViewer(page: number) {
 }
 
 function closeViewer() {
+  // 关闭查看器时若在涂鸦模式，先保存并退出
+  if (doodleMode.value) exitDoodleMode()
   viewerOpen.value = false
+}
+
+// 查看器背景点击：涂鸦模式下不关闭（避免误触）
+function onViewerBgClick() {
+  if (doodleMode.value) return
+  closeViewer()
 }
 
 function viewerZoom(d: number) {
@@ -1257,6 +1698,7 @@ function resetArrowTimer() {
 }
 
 function viewerPrev() {
+  if (doodleMode.value) return // 涂鸦模式下禁止翻页
   resetArrowTimer()
   if (viewerPage.value <= 1) return
   // 先退一页
@@ -1276,6 +1718,7 @@ function viewerPrev() {
 }
 
 function viewerNext() {
+  if (doodleMode.value) return // 涂鸦模式下禁止翻页
   resetArrowTimer()
   if (!book.value || endPage.value >= book.value.page_count) return
   // 如果当前页是 spread 的左页，跳过右页
@@ -1310,6 +1753,7 @@ function viewerNext() {
 
 // Wheel zoom — centered on pointer position
 function handleWheel(e: WheelEvent) {
+  if (doodleMode.value) return // 涂鸦模式下禁止缩放
   const delta = e.deltaY > 0 ? -0.12 : 0.12
   const oldZoom = viewerState.zoom
   viewerState.zoom = Math.max(0.2, Math.min(5, oldZoom + delta))
@@ -1318,6 +1762,7 @@ function handleWheel(e: WheelEvent) {
 // Drag to pan
 function startDrag(e: MouseEvent) {
   if (e.button !== 0 || viewerState.zoom <= 1) return
+  if (doodleMode.value) return // 涂鸦模式下禁止拖拽平移
   isDragging.value = true
   dragStart.x = e.clientX - panOffset.x
   dragStart.y = e.clientY - panOffset.y
@@ -1331,26 +1776,6 @@ function onDrag(e: MouseEvent) {
 
 function endDrag() {
   isDragging.value = false
-}
-
-// Auto-hide header in masonry mode — listen on document so scroll position doesn't matter
-function onDocMouseMove(e: MouseEvent) {
-  if (thumbViewMode.value !== 'masonry') {
-    headerHover.value = false
-    return
-  }
-  // 如果鼠标在 header 区域内（包括 popup），不隐藏
-  const header = document.querySelector('.reader-bar')
-  if (header?.contains(e.target as Node)) return
-
-  // Show header when mouse is within 60px of viewport top
-  if (e.clientY < 60) {
-    headerHover.value = true
-    if (headerHideTimer) clearTimeout(headerHideTimer)
-  } else if (headerHover.value) {
-    if (headerHideTimer) clearTimeout(headerHideTimer)
-    headerHideTimer = setTimeout(() => { headerHover.value = false }, 800)
-  }
 }
 
 // 三态主题：auto → light → dark → auto
@@ -1413,6 +1838,12 @@ async function loadBook() {
   spreads.value = []
   pageFavorites.value = []
   readingDirection.value = 'ltr'
+  // 重置涂鸦状态
+  doodleMode.value = false
+  doodleStrokes.value = []
+  doodleRedoStack.value = []
+  doodleImgOpacity.value = 1
+  loadDoodlesFromSettings([])
   try {
     // 虚拟书：收藏的页面
     if (isVirtualBook.value) {
@@ -1471,6 +1902,9 @@ async function loadBook() {
         // 读取阅读方向
         const dirSetting = bookSettings.find(s => s.key === 'reading_direction')
         readingDirection.value = dirSetting?.value === 'rtl' ? 'rtl' : 'ltr'
+        // 加载涂鸦数据 + 参考图透明度
+        loadDoodlesFromSettings(bookSettings)
+        loadOpacityFromSettings(bookSettings)
       } catch {
         // 加载失败时回退到序号请求
         console.warn('Failed to load page info, falling back to index-based URLs')
@@ -1483,7 +1917,6 @@ async function loadBook() {
 
 onMounted(() => {
   loadBook()
-  document.addEventListener('mousemove', onDocMouseMove)
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mousemove', onViewerMouseMove, true) // capture 阶段，避免被图片 stop 阻断
   window.addEventListener('resize', onResize)
@@ -1492,11 +1925,12 @@ onMounted(() => {
 watch(bookId, () => { loadBook() })
 
 onBeforeUnmount(() => {
+  // 组件卸载时若在涂鸦模式，立即保存未落盘的笔迹（防抖定时器会随卸载失效）
+  if (doodleMode.value) void flushDoodleSave()
   scrollObserver?.disconnect()
-  document.removeEventListener('mousemove', onDocMouseMove)
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mousemove', onViewerMouseMove, true)
   window.removeEventListener('resize', onResize)
-  if (headerHideTimer) clearTimeout(headerHideTimer)
+  if (doodleSaveTimer) { clearTimeout(doodleSaveTimer); doodleSaveTimer = null }
 })
 </script>

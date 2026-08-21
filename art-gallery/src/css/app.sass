@@ -584,6 +584,119 @@ $brand-dark: #c48820
   cursor: grabbing
 
 // ===================================
+// Doodle mode（涂鸦模式）
+// ===================================
+// 图片包裹层：默认收缩到图片实际尺寸，供画布精确覆盖
+.doodle-img-wrap
+  position: relative
+  display: inline-block
+  line-height: 0
+  max-width: calc(100vw - 140px)
+  max-height: calc(100vh - 120px)
+
+  @media (max-width: 768px)
+    max-width: calc(100vw - 80px)
+
+// 垫底壳：紧贴图片尺寸；勾线模式（草稿降透明度）时垫纯白，
+// 让降透明度的草稿向白色淡出（比深色背景更接近绘画软件的观感）
+.doodle-img-shell
+  position: relative
+  display: inline-block
+  line-height: 0
+
+  &--draft
+    background-color: #ffffff
+
+// 涂鸦模式：包裹层扩展到整个主区域（图片仍居中不变），
+// 画笔/橡皮可以涂出图片范围外；笔迹坐标锚定图片矩形
+.doodle-img-wrap--expanded
+  position: absolute
+  inset: 0
+  max-width: none
+  max-height: none
+  display: flex
+  align-items: center
+  justify-content: center
+
+  .viewer-image
+    max-width: calc(100vw - 140px)
+    max-height: calc(100vh - 120px)
+
+    @media (max-width: 768px)
+      max-width: calc(100vw - 80px)
+
+.doodle-canvas
+  position: absolute
+  top: 0
+  left: 0
+  width: 100%
+  height: 100%
+  z-index: 3
+  touch-action: none
+  cursor: crosshair
+
+  &--eraser
+    cursor: cell
+
+// 悬浮工具栏
+.doodle-toolbar
+  position: absolute
+  bottom: 18px
+  left: 50%
+  transform: translateX(-50%)
+  z-index: 20
+  background: rgba(28, 30, 38, 0.92)
+  border: 1px solid rgba(255, 255, 255, 0.12)
+  border-radius: 24px
+  backdrop-filter: blur(12px)
+  -webkit-backdrop-filter: blur(12px)
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45)
+  white-space: nowrap
+
+.doodle-color-dot
+  display: inline-block
+  width: 20px
+  height: 20px
+  margin: 0 3px
+  border-radius: 50%
+  cursor: pointer
+  border: 2px solid rgba(255, 255, 255, 0.25)
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2)
+  transition: transform 0.15s ease, border-color 0.15s ease
+
+  &:hover
+    transform: scale(1.18)
+
+  &--active
+    border-color: #ffffff
+    transform: scale(1.18)
+
+.doodle-width-btn
+  min-width: 34px
+  opacity: 0.85
+  &:hover
+    opacity: 1
+
+// 工具栏进出场动画
+.doodle-bar-fade-enter-active,
+.doodle-bar-fade-leave-active
+  transition: opacity 0.2s ease, transform 0.2s ease
+
+.doodle-bar-fade-enter-from,
+.doodle-bar-fade-leave-to
+  opacity: 0
+  transform: translateX(-50%) translateY(10px)
+
+// 缩略图涂鸦角标（左上角，与收藏角标右上角对称）
+.page-doodle-badge
+  position: absolute
+  top: 6px
+  left: 6px
+  z-index: 2
+  color: #ffcc00
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4))
+
+// ===================================
 // Book info drawer (detail page)
 // ===================================
 .info-drawer
@@ -610,6 +723,25 @@ $brand-dark: #c48820
 .masonry-header-float
   position: fixed !important
   z-index: 10
+
+// 瀑布流顶栏隐藏后的恢复按钮（右上角小圆钮）
+.masonry-header-restore
+  position: fixed
+  top: 10px
+  right: 14px
+  z-index: 12
+  color: white
+  background: rgba(0, 0, 0, 0.35)
+  backdrop-filter: blur(4px)
+  -webkit-backdrop-filter: blur(4px)
+
+  &:hover
+    background: rgba(0, 0, 0, 0.55)
+
+.body--light .masonry-header-restore
+  background: rgba(0, 0, 0, 0.25)
+  &:hover
+    background: rgba(0, 0, 0, 0.45)
 
 // Brand text color — gold on dark needs dark text, blue on light needs white text
 .q-btn[color="brand"] .q-btn__content,

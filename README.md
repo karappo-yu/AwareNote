@@ -25,6 +25,7 @@ AwareNote (Art Gallery) is a **local-first digital art book and comic management
 - **Category Management**: Organize books into custom categories
 - **Favorites & Collections**: Mark and manage favorite pages across books
 - **Spread (Dual-page) Management**: Manually or automatically group pages as spreads for manga/comic reading
+- **Doodle Mode**: Annotate reference images in the viewer with pen/eraser; strokes persist per page without touching original files
 - **Reading Direction**: Supports Left-to-Right (LTR) and Right-to-Left (RTL) layouts
 - **High-performance Rendering**: PDF pages rendered to SVG; oversized images auto-sampled
 - **Intelligent Caching**: Content-signature based cache invalidation (FNV hash); avoids re-processing unchanged files
@@ -170,6 +171,7 @@ AwareNote（Art Gallery）是一款**本地优先的数字画册与漫画管理�
 - **分类管理**：将书籍整理到自定义分类中
 - **收藏与精选**：跨书籍标记和管理喜欢的页面
 - **拼页（Spread）管理**：手动或自动将页面组合为双页 spread，适合漫画阅读
+- **涂鸦模式**：在查看器中对参考图进行画笔 / 橡皮标记涂鸦，笔迹按页持久化存储，不动原文件
 - **阅读方向**：支持从左到右（LTR）和从右到左（RTL）排版
 - **高性能渲染**：PDF 页面渲染为 SVG；超大图片自动抽样
 - **智能缓存**：基于内容签名（FNV hash）的缓存失效机制；避免重复处理未变更文件
@@ -315,6 +317,7 @@ AwareNote（Art Gallery）は、**ローカル優先のデジタル画集・漫�
 - **カテゴリ管理**: 本をカスタムカテゴリに整理
 - **お気に入り・コレクション**: 複数書籍をまたいでページをお気に入りに追加・管理
 - **スプレッド（見開き）管理**: ページを見開き（ダブルページ）として手動または自動で構成、漫画読者に最適
+- **落書きモード**: ビューアで参照画像にペン/消しゴムでマーキング、ページごとに永続化（元ファイルは変更なし）
 - **読む方向**: 左から右（LTR）および右から左（RTL）レイアウトをサポート
 - **高性能レンダリング**: PDF ページは SVG にレンダリング、超大画像は自動サンプリング
 - **インテリジェントキャッシュ**: コンテンツ署名（FNVハッシュ）ベースのキャッシュ無効化；未変更ファイルを再処理しない

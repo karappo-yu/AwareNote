@@ -17,6 +17,8 @@ cd "$FRONTEND_DIR"
 npm run build
 
 echo "==> Copying frontend dist to backend static dir..."
+# STATIC_DIR 被 .gitignore 忽略，新环境可能不存在，先确保目录存在
+mkdir -p "$STATIC_DIR"
 # 清理旧产物（保留 favicon.ico）
 rm -rf "$STATIC_DIR/assets" "$STATIC_DIR/icons.svg" "$STATIC_DIR/index.html"
 cp -R "$FRONTEND_DIR/dist/"* "$STATIC_DIR/"
@@ -25,10 +27,30 @@ cp -R "$FRONTEND_DIR/dist/"* "$STATIC_DIR/"
 echo "==> Building backend..."
 cargo build --release --bin awarenotes --manifest-path "$ROOT_DIR/Cargo.toml"
 
-swiftc \
+# 注：macOS 27 beta 的 Command Line Tools 缺少 SwiftUIMacros 宏插件，
+# 默认 SDK 编译 @State 等宏会报 "plugin for module 'SwiftUIMacros' not found"。
+# 自动回退到可用的旧版 SDK（如 MacOSX26.5.sdk）编译，产物向后兼容。
+echo "==> Compiling settings app..."
+if ! swiftc \
   -parse-as-library \
   "$ROOT_DIR/native-macos/AwarenotesSettings.swift" \
-  -o "$BUILD_DIR/awarenotes-settings"
+  -o "$BUILD_DIR/awarenotes-settings" 2>/dev/null; then
+  echo "    默认 SDK 编译失败（缺少 SwiftUI 宏插件），尝试旧版 SDK..."
+  FALLBACK_SDK="$(ls -d /Library/Developer/CommandLineTools/SDKs/MacOSX2[0-6]*.sdk 2>/dev/null | sort -V | tail -1 || true)"
+  if [ -n "${FALLBACK_SDK}" ]; then
+    echo "    使用 SDK: $FALLBACK_SDK"
+    swiftc \
+      -parse-as-library \
+      -sdk "$FALLBACK_SDK" \
+      "$ROOT_DIR/native-macos/AwarenotesSettings.swift" \
+      -o "$BUILD_DIR/awarenotes-settings"
+  else
+    swiftc \
+      -parse-as-library \
+      "$ROOT_DIR/native-macos/AwarenotesSettings.swift" \
+      -o "$BUILD_DIR/awarenotes-settings"
+  fi
+fi
 
 rm -rf "$APP_DIR"
 rm -rf "$SETTINGS_APP_DIR"
