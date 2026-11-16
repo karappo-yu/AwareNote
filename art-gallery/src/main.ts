@@ -23,8 +23,15 @@ app.mount('#app')
 
 // Restore theme preference after Quasar init
 const savedTheme = LocalStorage.getItem<'auto' | 'light' | 'dark'>('themeMode') || 'auto'
+const prefersDarkMedia = window.matchMedia('(prefers-color-scheme: dark)')
 if (savedTheme === 'auto') {
-  Dark.set(window.matchMedia('(prefers-color-scheme: dark)').matches)
+  Dark.set(prefersDarkMedia.matches)
 } else {
   Dark.set(savedTheme === 'dark')
 }
+
+// 系统深浅色偏好可能随时变化：auto 模式下跟随系统实时切换
+prefersDarkMedia.addEventListener('change', (e) => {
+  const mode = LocalStorage.getItem<'auto' | 'light' | 'dark'>('themeMode') || 'auto'
+  if (mode === 'auto') Dark.set(e.matches)
+})

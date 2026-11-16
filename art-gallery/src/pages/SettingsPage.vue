@@ -374,6 +374,13 @@ onMounted(() => { fetchConfig() })
   animation: pulse-dot 1.5s infinite;
 }
 
+/* 减弱动态效果偏好：停止呼吸灯循环动画，保留静态颜色标识 */
+@media (prefers-reduced-motion: reduce) {
+  .log-dot-active {
+    animation: none;
+  }
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -390,11 +397,19 @@ onMounted(() => { fetchConfig() })
 .log_type-ERROR { color: #ef4444; }
 .log-type-ERROR { color: #ef4444; }
 
-.log-container::-webkit-scrollbar {
-  width: 4px;
+.log-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
 }
-.log-container::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.2);
-  border-radius: 4px;
+
+/* 旧版 WebKit 回退：仅在浏览器不支持标准 scrollbar-color 时启用 */
+@supports not (scrollbar-color: auto) {
+  .log-container::-webkit-scrollbar {
+    width: 4px;
+  }
+  .log-container::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.2);
+    border-radius: 4px;
+  }
 }
 </style>

@@ -128,7 +128,7 @@ const imgStyle = computed(() => {
     case 'width':
       return { maxWidth: '100%', maxHeight: 'none', objectFit: 'contain' }
     case 'screen':
-      return { maxWidth: '100%', maxHeight: 'calc(100vh - 96px)', objectFit: 'contain' }
+      return { maxWidth: '100%', maxHeight: 'calc(100dvh - 96px)', objectFit: 'contain' }
     case 'original':
       return { maxWidth: 'none', maxHeight: 'none', objectFit: 'none' }
     default:
@@ -138,7 +138,8 @@ const imgStyle = computed(() => {
 
 function toggleDark() {
   Dark.toggle()
-  LocalStorage.set('darkMode', Dark.isActive)
+  // 与主页/详情页共用同一个偏好键（'themeMode'），保持三处主题状态一致
+  LocalStorage.set('themeMode', Dark.isActive ? 'dark' : 'light')
 }
 
 function handleKey(e: KeyboardEvent) {

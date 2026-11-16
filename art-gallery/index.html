@@ -3,10 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 在首次渲染前声明支持深浅色，让浏览器原生 UI（滚动条、表单控件、初始画布背景）跟随主题，避免主题闪烁 -->
+    <meta name="color-scheme" content="light dark" />
     <title>Art Gallery</title>
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // 首屏前同步恢复主题（Quasar 的 Dark 插件在 JS 加载后才生效，先打上 body--dark/body--light 避免闪烁）
+      try {
+        var themeMode = JSON.parse(localStorage.getItem('themeMode') || '"auto"')
+        var dark = themeMode === 'dark' ||
+          (themeMode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.body.classList.add(dark ? 'body--dark' : 'body--light')
+      } catch (e) {}
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

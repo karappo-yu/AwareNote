@@ -112,7 +112,7 @@
     <!-- Content -->
     <q-page-container>
       <q-page
-        :style="thumbViewMode === 'masonry' ? 'margin-top: -48px; min-height: 100vh' : 'min-height: calc(100vh - 48px)'"
+        :style="thumbViewMode === 'masonry' ? 'margin-top: -48px; min-height: 100dvh' : 'min-height: calc(100dvh - 48px)'"
       >
         <!-- 返回顶部按钮 -->
         <q-page-sticky position="bottom-right" :offset="[18, 18]" style="z-index: 9999">
@@ -123,6 +123,7 @@
             color="brand"
             icon="keyboard_arrow_up"
             size="md"
+            aria-label="返回顶部"
             @click="scrollToTop"
           >
             <q-tooltip>返回顶部</q-tooltip>
@@ -154,26 +155,31 @@
                       :src="getPageUrl(page)"
                       :ratio="3/4"
                       fit="contain"
+                      loading="lazy"
                     >
                       <template v-slot:loading>
                         <q-skeleton type="rect" style="height: 100%" />
                       </template>
                       <!-- Page favorite badge in grid view (not for virtual book) -->
                       <template v-if="!isVirtualBook">
-                        <q-icon
+                        <q-btn
                           v-if="isGridPageFavorited(page)"
-                          name="favorite"
-                          color="pink-4"
-                          size="16px"
+                          flat round dense
+                          icon="favorite"
+                          text-color="pink-4"
+                          size="sm"
                           class="page-fav-badge"
-                          @click.stop="toggleGridPageFavorite(page, $event)"
+                          :aria-label="`取消收藏第 ${page} 页`"
+                          @click.stop="toggleGridPageFavorite(page)"
                         />
-                        <q-icon
+                        <q-btn
                           v-else
-                          name="favorite_border"
-                          size="16px"
+                          flat round dense
+                          icon="favorite_border"
+                          size="sm"
                           class="page-fav-badge page-fav-badge-hover"
-                          @click.stop="toggleGridPageFavorite(page, $event)"
+                          :aria-label="`收藏第 ${page} 页`"
+                          @click.stop="toggleGridPageFavorite(page)"
                         />
                         <!-- 涂鸦角标 -->
                         <q-icon
@@ -227,20 +233,24 @@
                       />
                       <!-- Page favorite badge (not for virtual book) -->
                       <template v-if="!isVirtualBook">
-                        <q-icon
+                        <q-btn
                           v-if="isPageFavorited(item)"
-                          name="favorite"
-                          color="pink-4"
-                          size="16px"
+                          flat round dense
+                          icon="favorite"
+                          text-color="pink-4"
+                          size="sm"
                           class="page-fav-badge"
-                          @click.stop="togglePageFavoriteFromMasonry(item, $event)"
+                          :aria-label="item.isSpread ? `取消收藏第 ${item.pages![0]}-${item.pages![1]} 页` : `取消收藏第 ${item.page} 页`"
+                          @click.stop="togglePageFavoriteFromMasonry(item)"
                         />
-                        <q-icon
+                        <q-btn
                           v-else
-                          name="favorite_border"
-                          size="16px"
+                          flat round dense
+                          icon="favorite_border"
+                          size="sm"
                           class="page-fav-badge page-fav-badge-hover"
-                          @click.stop="togglePageFavoriteFromMasonry(item, $event)"
+                          :aria-label="item.isSpread ? `收藏第 ${item.pages![0]}-${item.pages![1]} 页` : `收藏第 ${item.page} 页`"
+                          @click.stop="togglePageFavoriteFromMasonry(item)"
                         />
                         <!-- 涂鸦角标（仅单页） -->
                         <q-icon
@@ -483,16 +493,19 @@
               <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
 
               <!-- 颜色 -->
-              <span
+              <button
                 v-for="c in DOODLE_COLORS"
                 :key="c"
+                type="button"
                 class="doodle-color-dot"
                 :class="{ 'doodle-color-dot--active': doodleColor === c && doodleTool === 'pen' }"
                 :style="{ background: c }"
+                :aria-label="doodleColorNames[c]"
+                :aria-pressed="doodleColor === c && doodleTool === 'pen'"
                 @click="selectDoodleColor(c)"
               >
                 <q-tooltip>{{ doodleColorNames[c] }}</q-tooltip>
-              </span>
+              </button>
 
               <q-separator vertical color="white" class="q-mx-xs" style="opacity: 0.15; height: 18px" />
 
@@ -916,12 +929,13 @@ async function toggleGridPageFavorite(page: number, event?: Event) {
 
 // 返回顶部
 const showBackToTop = ref(false)
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  window.scrollTo({ top: 0, behavior: reduceMotion.matches ? 'auto' : 'smooth' })
 }
-function onMouseMove(e: MouseEvent) {
-  // 页面有滚动 且 鼠标接近屏幕底部时显示
-  showBackToTop.value = window.scrollY > 300 && e.clientY > window.innerHeight - 150
+function onScroll() {
+  // 页面滚动超过一屏后显示（不依赖鼠标位置，键盘/触屏用户同样可用）
+  showBackToTop.value = window.scrollY > 300
 }
 
 // Reactive window width for responsive masonry columns
@@ -1938,7 +1952,7 @@ async function loadBook() {
 
 onMounted(() => {
   loadBook()
-  document.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('scroll', onScroll, { passive: true })
   document.addEventListener('mousemove', onViewerMouseMove, true) // capture 阶段，避免被图片 stop 阻断
   window.addEventListener('resize', onResize)
 })
@@ -1949,7 +1963,7 @@ onBeforeUnmount(() => {
   // 组件卸载时若在涂鸦模式，立即保存未落盘的笔迹（防抖定时器会随卸载失效）
   if (doodleMode.value) void flushDoodleSave()
   scrollObserver?.disconnect()
-  document.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('scroll', onScroll)
   document.removeEventListener('mousemove', onViewerMouseMove, true)
   window.removeEventListener('resize', onResize)
   if (doodleSaveTimer) { clearTimeout(doodleSaveTimer); doodleSaveTimer = null }

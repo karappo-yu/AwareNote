@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-lg" style="position: relative; min-height: 100vh">
+  <q-page class="q-pa-lg" style="position: relative; min-height: 100dvh">
     <!-- 返回顶部按钮 -->
     <q-page-sticky position="bottom-right" :offset="[18, 18]" style="z-index: 9999">
       <q-btn
@@ -9,6 +9,7 @@
         color="brand"
         icon="keyboard_arrow_up"
         size="md"
+        aria-label="返回顶部"
         @click="scrollToTop"
       >
         <q-tooltip>返回顶部</q-tooltip>
@@ -93,6 +94,7 @@
             :src="coverUrl(book.id)"
             :ratio="3/4"
             fit="cover"
+            loading="lazy"
           >
             <template v-slot:loading>
               <div class="full-width full-height flex flex-center" style="background: var(--bg-surface)">
@@ -192,7 +194,7 @@
       >
         <q-item-section avatar>
           <q-avatar rounded size="56px" style="border-radius: 8px">
-            <q-img :src="coverUrl(book.id)" fit="cover" style="border-radius: 8px" />
+            <q-img :src="coverUrl(book.id)" fit="cover" loading="lazy" style="border-radius: 8px" />
           </q-avatar>
         </q-item-section>
 
@@ -261,20 +263,21 @@ watch(() => library.selectedCategory, () => {
 })
 
 // 返回顶部
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  window.scrollTo({ top: 0, behavior: reduceMotion.matches ? 'auto' : 'smooth' })
 }
 
-// 页面有滚动 且 鼠标接近屏幕底部时显示
-function onMouseMove(e: MouseEvent) {
-  showBackToTop.value = window.scrollY > 300 && e.clientY > window.innerHeight - 150
+// 页面滚动超过一屏后显示（被动监听；不依赖鼠标位置，键盘/触屏用户同样可用）
+function onScroll() {
+  showBackToTop.value = window.scrollY > 300
 }
 
 onMounted(() => {
-  document.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('scroll', onScroll, { passive: true })
 })
 onUnmounted(() => {
-  document.removeEventListener('mousemove', onMouseMove)
+  window.removeEventListener('scroll', onScroll)
 })
 
 const coverUrl = coverUrlFn
