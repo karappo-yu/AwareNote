@@ -13,6 +13,17 @@ $brand-dark: #c48820
   --q-brand: #e8a838
   --brand: #e8a838
   --brand-text: #1a1a2e
+  // 让浏览器原生 UI（滚动条、表单控件等）支持深浅两套方案
+  color-scheme: light dark
+  // 标准滚动条样式：细滚动条 + 中性半透明 thumb（深浅主题下都可见）
+  scrollbar-width: thin
+  scrollbar-color: rgba(128, 128, 128, 0.35) transparent
+
+// 实际使用的方案跟随 Quasar 打在 body 上的类
+html:has(> body.body--dark)
+  color-scheme: dark
+html:has(> body.body--light)
+  color-scheme: light
 
 // ===================================
 // Dark theme — Deep charcoal + gold
@@ -116,17 +127,20 @@ $brand-dark: #c48820
       color: #64748b !important
 
 // ===================================
-// Scrollbar
+// Scrollbar — 旧版 WebKit 回退
+// （标准属性见 :root 的 scrollbar-width / scrollbar-color；
+//   仅在不支持标准属性的浏览器里启用，避免与标准属性冲突）
 // ===================================
-::-webkit-scrollbar
-  width: 6px
-::-webkit-scrollbar-track
-  background: transparent
-::-webkit-scrollbar-thumb
-  background: rgba(128, 128, 128, 0.15)
-  border-radius: 3px
-::-webkit-scrollbar-thumb:hover
-  background: rgba(128, 128, 128, 0.3)
+@supports not (scrollbar-color: auto)
+  ::-webkit-scrollbar
+    width: 6px
+  ::-webkit-scrollbar-track
+    background: transparent
+  ::-webkit-scrollbar-thumb
+    background: rgba(128, 128, 128, 0.15)
+    border-radius: 3px
+  ::-webkit-scrollbar-thumb:hover
+    background: rgba(128, 128, 128, 0.3)
 
 // ===================================
 // Book card — Kavita/Plex inspired
@@ -454,7 +468,7 @@ $brand-dark: #c48820
 .viewer-container
   background: rgba(15, 17, 23, 0.95)
   width: 100vw
-  height: 100vh
+  height: 100dvh
 
 .viewer-topbar
   background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%)
@@ -545,7 +559,7 @@ $brand-dark: #c48820
 // The image itself
 .viewer-image
   max-width: calc(100vw - 140px)
-  max-height: calc(100vh - 120px)
+  max-height: calc(100dvh - 120px)
   object-fit: contain
   user-select: none
   -webkit-user-drag: none
@@ -557,7 +571,7 @@ $brand-dark: #c48820
 .viewer-spread-container
   display: flex
   max-width: calc(100vw - 140px)
-  max-height: calc(100vh - 120px)
+  max-height: calc(100dvh - 120px)
   user-select: none
   -webkit-user-drag: none
 
@@ -567,7 +581,7 @@ $brand-dark: #c48820
 .viewer-spread-half
   width: 50%
   height: auto
-  max-height: calc(100vh - 120px)
+  max-height: calc(100dvh - 120px)
   object-fit: contain
   user-select: none
   -webkit-user-drag: none
@@ -592,7 +606,7 @@ $brand-dark: #c48820
   display: inline-block
   line-height: 0
   max-width: calc(100vw - 140px)
-  max-height: calc(100vh - 120px)
+  max-height: calc(100dvh - 120px)
 
   @media (max-width: 768px)
     max-width: calc(100vw - 80px)
@@ -620,7 +634,7 @@ $brand-dark: #c48820
 
   .viewer-image
     max-width: calc(100vw - 140px)
-    max-height: calc(100vh - 120px)
+    max-height: calc(100dvh - 120px)
 
     @media (max-width: 768px)
       max-width: calc(100vw - 80px)
@@ -758,3 +772,73 @@ $brand-dark: #c48820
 // Brand toggle button active state — dynamic text color
 .q-btn-toggle .q-btn.bg-brand .q-btn__content
   color: var(--brand-text) !important
+
+// ===================================
+// 键盘可达性：hover 才显示的收藏角标，键盘聚焦卡片时同样要出现
+// ===================================
+.masonry-card:focus-within .page-fav-badge-hover,
+.thumb-card:focus-within .page-fav-badge-hover
+  opacity: 0.7
+
+// 角标现在是 q-btn（原生按钮），聚焦时始终可见并显示焦点环
+.page-fav-badge:focus-visible
+  opacity: 1 !important
+  outline: 2px solid var(--brand)
+  outline-offset: 1px
+
+// 涂鸦颜色圆点使用原生 <button>，重置默认样式
+button.doodle-color-dot
+  appearance: none
+  padding: 0
+
+  &:focus-visible
+    outline: 2px solid #ffffff
+    outline-offset: 2px
+    opacity: 1
+
+// ===================================
+// 减弱动态效果偏好：只关掉位移/缩放/循环动画，
+// 保留颜色、透明度等非位移过渡（不做全局 0.01ms 一刀切）
+// ===================================
+@media (prefers-reduced-motion: reduce)
+  .book-card
+    transition: box-shadow 0.2s ease
+    &:hover
+      transform: none
+
+  .thumb-card
+    transition: box-shadow 0.2s ease, border-color 0.2s ease
+    &:hover
+      transform: none
+
+  .masonry-card
+    transition: border-color 0.2s ease, box-shadow 0.2s ease
+
+  .masonry-img-native,
+  .masonry-spread-half
+    transition: none
+
+  .back-to-top-btn
+    transition: opacity 0.2s ease
+    &.visible
+      transform: none
+    &:hover
+      transform: none !important
+
+  .viewer-nav-arrow,
+  .viewer-nav-arrow:hover
+    transition: opacity 0.2s ease, background 0.2s ease
+    transform: translateY(-50%) !important
+
+  .page-fav-badge,
+  .doodle-color-dot,
+  .doodle-color-dot:hover
+    transition: opacity 0.2s ease
+    transform: none
+
+  .slide-up-enter-active,
+  .slide-up-leave-active
+    transition: opacity 0.2s ease
+  .slide-up-enter-from,
+  .slide-up-leave-to
+    transform: none

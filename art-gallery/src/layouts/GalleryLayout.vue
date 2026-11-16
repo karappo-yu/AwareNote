@@ -21,11 +21,12 @@
         >
           <template v-slot:prepend><q-icon name="search" size="18px" /></template>
           <template v-slot:append>
-            <q-icon
+            <q-btn
               v-if="library.searchQuery"
-              name="close"
-              class="cursor-pointer"
-              size="16px"
+              flat round dense
+              icon="close"
+              size="xs"
+              aria-label="清除搜索"
               @click="library.searchQuery = ''"
             />
           </template>

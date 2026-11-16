@@ -29,6 +29,7 @@
             :src="virtualBookCoverUrl"
             :ratio="3/4"
             fit="cover"
+            loading="lazy"
           >
             <template v-slot:loading>
               <div class="full-width full-height flex flex-center" style="background: var(--bg-surface)">
@@ -62,6 +63,7 @@
             :src="coverUrl(book.id)"
             :ratio="3/4"
             fit="cover"
+            loading="lazy"
           >
             <template v-slot:loading>
               <div class="full-width full-height flex flex-center" style="background: var(--bg-surface)">
